@@ -38,5 +38,5 @@ py-modules = ["network_propagation"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["scbiomarker*", "modules*", "configs*"]
+include = ["scbiomarker*", "modules*", "configs*", "scripts*"]
 exclude = ["data*", "experiment_asthma_find*"]
