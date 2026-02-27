@@ -1,5 +1,3 @@
-"""Public preselection script wrapper with lazy import."""
-
 from __future__ import annotations
 
 from importlib import import_module
@@ -13,17 +11,7 @@ _impl_module: ModuleType | None = None
 def _load_impl_module() -> ModuleType:
     global _impl_module
     if _impl_module is None:
-        try:
-            _impl_module = import_module(_IMPL_MODULE)
-        except ModuleNotFoundError as error:
-            missing_name = str(getattr(error, "name", ""))
-            if missing_name == "scanpy":
-                raise ModuleNotFoundError(
-                    "Missing dependency 'scanpy' required by scbiomarker preselection utilities.\n"
-                    "Install with:\n"
-                    "pip install scanpy==1.9.6\n"
-                ) from error
-            raise
+        _impl_module = import_module(_IMPL_MODULE)
     return _impl_module
 
 

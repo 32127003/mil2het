@@ -1,5 +1,3 @@
-"""Public biomarker module wrapper with lazy import."""
-
 from __future__ import annotations
 
 from importlib import import_module
@@ -32,12 +30,6 @@ def _load_impl_module() -> ModuleType:
                     "2) Install torch-scatter for the same torch/cuda pair:\n"
                     "   pip install torch-scatter -f "
                     "https://data.pyg.org/whl/torch-${TORCH}+${CUDA}.html\n"
-                ) from error
-            if missing_name == "scanpy":
-                raise ModuleNotFoundError(
-                    "Missing dependency 'scanpy' required by scbiomarker biomarker module.\n"
-                    "Install with:\n"
-                    "pip install scanpy==1.9.6\n"
                 ) from error
             raise
     return _impl_module

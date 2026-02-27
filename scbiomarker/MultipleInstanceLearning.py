@@ -1,5 +1,3 @@
-"""Public MultipleInstanceLearning module wrapper with lazy import."""
-
 from __future__ import annotations
 
 from importlib import import_module

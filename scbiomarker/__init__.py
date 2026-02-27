@@ -1,5 +1,3 @@
-"""Public package API for scbiomarker."""
-
 from __future__ import annotations
 
 from importlib import import_module

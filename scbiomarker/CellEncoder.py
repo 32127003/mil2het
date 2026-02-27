@@ -1,9 +1,3 @@
-"""Public CellEncoder module wrapper with lazy import.
-
-The implementation depends on PyTorch.
-`torch_scatter` is optional and used when available for faster segmented ops.
-"""
-
 from __future__ import annotations
 
 from importlib import import_module
