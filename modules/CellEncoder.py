@@ -18,7 +18,45 @@ from typing import Dict, Optional, Sequence, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as torch_functional
-from torch_scatter import scatter_add, scatter_max
+try:
+    from torch_scatter import scatter_add as _scatter_add
+    from torch_scatter import scatter_max as _scatter_max
+except ImportError:
+    if not hasattr(torch.Tensor, "scatter_reduce_"):
+        raise
+
+    def _scatter_add(
+        source: torch.Tensor,
+        index: torch.Tensor,
+        dim: int,
+        dim_size: int,
+    ) -> torch.Tensor:
+        output_shape = list(source.shape)
+        output_shape[int(dim)] = int(dim_size)
+        output = source.new_zeros(output_shape)
+        return output.scatter_add_(int(dim), index.long(), source)
+
+    def _scatter_max(
+        source: torch.Tensor,
+        index: torch.Tensor,
+        dim: int,
+        dim_size: int,
+    ) -> tuple[torch.Tensor, None]:
+        output_shape = list(source.shape)
+        output_shape[int(dim)] = int(dim_size)
+        if source.is_floating_point():
+            fill_value = torch.finfo(source.dtype).min
+        else:
+            fill_value = torch.iinfo(source.dtype).min
+        output = source.new_full(output_shape, fill_value)
+        output.scatter_reduce_(
+            int(dim),
+            index.long(),
+            source,
+            reduce="amax",
+            include_self=True,
+        )
+        return output, None
 
 try:
     from .prior_interface_find import MultiViewPriorInterfaceFIND
@@ -40,10 +78,10 @@ def scatter_softmax(logits: torch.Tensor, destination_index: torch.Tensor, num_n
     logits = logits.permute(0, 2, 1).contiguous()  # [B, H, E]
     index = destination_index.view(1, 1, num_edges).expand(batch_size, num_heads, num_edges)
 
-    max_values, _ = scatter_max(logits, index, dim=2, dim_size=num_nodes)
+    max_values, _ = _scatter_max(logits, index, dim=2, dim_size=num_nodes)
     max_per_edge = max_values.gather(2, index)
     exp_values = torch.exp(logits - max_per_edge)
-    denom = scatter_add(exp_values, index, dim=2, dim_size=num_nodes)
+    denom = _scatter_add(exp_values, index, dim=2, dim_size=num_nodes)
     denom_per_edge = denom.gather(2, index)
     attention = exp_values / (denom_per_edge + 1e-9)
     attention = attention.to(dtype=logits.dtype)

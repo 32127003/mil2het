@@ -19,15 +19,18 @@ dependencies = [
   "h5py==3.10.0",
   "scanpy==1.9.6",
   "tqdm==4.66.1",
-  "accelerate>=0.32,<2",
-  "httpx",
-  "esm==3.2.1.post1",
 ]
 
 [project.optional-dependencies]
 encoder = [
   "torch==2.3.1",
   "torch-geometric",
+  "torch-scatter",
+]
+protein = [
+  "accelerate>=0.32,<2",
+  "httpx",
+  "esm==3.2.1.post1",
 ]
 
 [tool.setuptools]

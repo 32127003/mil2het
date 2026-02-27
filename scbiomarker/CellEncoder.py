@@ -1,8 +1,7 @@
 """Public CellEncoder module wrapper with lazy import.
 
-The implementation depends on PyTorch and `torch_scatter`.
-For GPU usage, users should install a CUDA-matched PyTorch build first, then
-install a matching `torch-scatter` wheel.
+The implementation depends on PyTorch.
+`torch_scatter` is optional and used when available for faster segmented ops.
 """
 
 from __future__ import annotations
@@ -22,15 +21,11 @@ def _load_impl_module() -> ModuleType:
             _impl_module = import_module(_IMPL_MODULE)
         except ModuleNotFoundError as error:
             missing_name = getattr(error, "name", "")
-            if str(missing_name) in {"torch", "torch_scatter"}:
+            if str(missing_name) == "torch":
                 raise ModuleNotFoundError(
-                    f"Missing optional dependency '{missing_name}' required by scbiomarker CellEncoder.\n"
-                    "Install dependencies with matching PyTorch/CUDA versions:\n"
-                    "1) Install CUDA-specific PyTorch for your system:\n"
-                    "   https://pytorch.org/get-started/locally/\n"
-                    "2) Install torch-scatter for the same torch/cuda pair:\n"
-                    "   pip install torch-scatter -f "
-                    "https://data.pyg.org/whl/torch-${TORCH}+${CUDA}.html\n"
+                    "Missing dependency 'torch' required by scbiomarker CellEncoder.\n"
+                    "Install PyTorch for your system:\n"
+                    "https://pytorch.org/get-started/locally/\n"
                 ) from error
             raise
     return _impl_module
