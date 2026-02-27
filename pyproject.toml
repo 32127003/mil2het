@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scbiomarker"
+version = "0.1.0"
+description = "Single-cell biomarker modeling and analysis toolkit."
+requires-python = ">=3.10"
+
+[tool.setuptools]
+py-modules = ["network_propagation"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["modules", "configs"]
+exclude = ["data*", "experiment_asthma_find*"]
