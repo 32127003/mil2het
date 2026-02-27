@@ -1,0 +1,13 @@
+{
+  "format_version": 1,
+  "merge_choice": "concat",
+  "sources": [
+    "GPT",
+    "node2vec",
+    "ESM3"
+  ],
+  "source_norm_mode": "l2",
+  "output_norm_mode": "layernorm",
+  "num_genes": 2000,
+  "genes_sha256": "2447355f17dd914dba52b7edb0166d5848bd8f8d98c714e5ad00cb5a83bb7dd6"
+}

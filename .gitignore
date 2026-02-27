@@ -1,0 +1,97 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.py,cover
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+.vscode/
+old/
+
+# Test / lint / coverage caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Build / packaging
+build/
+dist/
+.eggs/
+*.egg-info/
+pip-wheel-metadata/
+
+# IDE / OS junk
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+logs/
+tmp/
+
+# Local environment files
+.env
+.env.*
+*.local
+
+# ML training artifacts (large, reproducible outputs)
+**/train_runs/
+**/cache/
+**/checkpoints/
+**/runs/
+**/mlruns/
+**/wandb/
+events.out.tfevents*
+
+# Legacy experiment output structure
+experiment/**/split_idx_*/
+old/results*/
+old/splits/
+
+# Large model and array artifacts
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.pkl
+*.joblib
+*.npy
+*.npz
+*.h5
+*.h5ad
+*.rds
+
+# Large raw/reference data files
+data/9606.protein.*
+data/*.tsv
+data/**/*.tsv
+*.fa
+*.fasta
+
+# Nested third-party repo metadata
+data/TxT/
+
+# Local notes
+chat.txt

@@ -1,0 +1,9 @@
+Dataset=asthma_ext
+Total cells=52152
+Total patients=8
+Total patient-samples=21
+Sample fold sizes=[6, 6, 4, 5]
+Fold sizes=[12414, 14628, 9943, 15167]
+Patient to label mapping: {'500008': '0', '500012': '0', '500021': '1', '500024': '0', '500030': '1', '500015': '0', '500023': '1', '500035': '1'}
+Patients with label conflicts: {}
+details: {'positive_labels': ['1'], 'negative_labels': ['0'], 'original_labels': ['0', '1'], 'mapped_counts': {'0': 26755, '1': 25397}}

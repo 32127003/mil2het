@@ -1,0 +1,20 @@
+{
+  "adata_path": "/data2/project/bin_jip/Biomarker/data/asthma/asthma_baseline_filtered.h5ad",
+  "k": 2000,
+  "label_column": "Response2",
+  "patient_column": "PRISM_ID",
+  "positive_labels": [
+    "1"
+  ],
+  "negative_labels": [
+    "0"
+  ],
+  "standardize": true,
+  "C": 1.0,
+  "max_iter": 5000,
+  "class_weight": "balanced",
+  "seed": 42,
+  "n_patients": 28,
+  "n_cells": 259552,
+  "n_genes": 14314
+}
