@@ -6,8 +6,6 @@ scipy==1.15.3
 # CUDA 11.8 PyTorch wheels
 --extra-index-url https://download.pytorch.org/whl/cu118
 torch==2.3.1
-torchvision==0.18.1
-torchaudio==2.3.1
 
 # PyG extension wheels for torch 2.3.1 + cu118
 --find-links https://data.pyg.org/whl/torch-2.3.1+cu118.html

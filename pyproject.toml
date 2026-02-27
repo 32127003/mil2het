@@ -7,6 +7,7 @@ name = "scbiomarker"
 version = "0.1.0"
 description = "Single-cell biomarker modeling and analysis toolkit."
 requires-python = ">=3.10"
+
 dependencies = [
   "numpy==1.26.1",
   "pandas==2.0.3",
@@ -24,15 +25,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-gpu = [
+encoder = [
   "torch==2.3.1",
-  "torchvision==0.18.1",
-  "torchaudio==2.3.1",
-  "pyg_lib",
-  "torch_scatter",
-  "torch_sparse",
-  "torch_cluster",
-  "torch_spline_conv",
   "torch-geometric",
 ]
 
