@@ -7,11 +7,39 @@ name = "scbiomarker"
 version = "0.1.0"
 description = "Single-cell biomarker modeling and analysis toolkit."
 requires-python = ">=3.10"
+dependencies = [
+  "numpy==1.26.1",
+  "pandas==2.0.3",
+  "scipy==1.15.3",
+  "scikit-learn==1.7.2",
+  "umap-learn==0.5.11",
+  "pynndescent==0.6.0",
+  "anndata==0.9.2",
+  "h5py==3.10.0",
+  "scanpy==1.9.6",
+  "tqdm==4.66.1",
+  "accelerate>=0.32,<2",
+  "httpx",
+  "esm==3.2.1.post1",
+]
+
+[project.optional-dependencies]
+gpu = [
+  "torch==2.3.1",
+  "torchvision==0.18.1",
+  "torchaudio==2.3.1",
+  "pyg_lib",
+  "torch_scatter",
+  "torch_sparse",
+  "torch_cluster",
+  "torch_spline_conv",
+  "torch-geometric",
+]
 
 [tool.setuptools]
 py-modules = ["network_propagation"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["modules", "configs"]
+include = ["scbiomarker*", "modules*", "configs*"]
 exclude = ["data*", "experiment_asthma_find*"]
