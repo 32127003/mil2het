@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import pickle
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -36,6 +37,7 @@ BIOMARKER_ENDPOINTS = [
     "forward_bag_from_expression",
     "forward_bag_from_embeddings",
     "sample_rows_with_replacement",
+    "run_analysis_phase",
     "parse_args",
     "main",
 ]
@@ -52,6 +54,23 @@ def build_regulation_onehot(num_celltypes: int, num_nodes: int) -> torch.Tensor:
     labels = torch.randint(0, 3, (num_celltypes, num_nodes))
     regulation.scatter_(2, labels.unsqueeze(-1), 1.0)
     return regulation
+
+
+class ToyAdataView:
+    def __init__(self, matrix: np.ndarray) -> None:
+        self.X = matrix
+
+
+class ToyAdata:
+    def __init__(self, expression: np.ndarray, obs: pd.DataFrame, var_names: list[str]) -> None:
+        self._expression = np.asarray(expression, dtype=np.float32)
+        self.obs = obs
+        self.var_names = list(var_names)
+        self.n_obs = int(self._expression.shape[0])
+
+    def __getitem__(self, item):
+        row_sel, col_sel = item
+        return ToyAdataView(self._expression[row_sel][:, col_sel])
 
 
 def test_biomarker_endpoints_exist() -> None:
@@ -323,6 +342,231 @@ def test_biomarker_feature_builders_and_metrics() -> None:
     assert sampled_rows.shape == (4, 2)
 
 
+def test_biomarker_run_analysis_phase_smoke() -> None:
+    impl_module = biomarker._load_impl_module()
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+
+        run_dir = temp_path / "run_dir"
+        run_dir.mkdir(parents=True)
+        preselection_root = temp_path / "preselection"
+        np_dir = preselection_root / "NP"
+        deg_dir = preselection_root / "DEG"
+        splits_dir = temp_path / "splits"
+        np_dir.mkdir(parents=True)
+        deg_dir.mkdir(parents=True)
+        splits_dir.mkdir(parents=True)
+
+        genes = ["G1", "G2"]
+        pd.DataFrame({"gene": genes}).to_csv(np_dir / "NP_max.tsv", sep="\t", index=False)
+        for celltype_name in ["Bcell", "Tcell"]:
+            pd.DataFrame({"gene": genes, "regulation": [1, -1]}).to_csv(
+                deg_dir / f"DEG_metrics_{celltype_name}_pass.tsv",
+                sep="\t",
+                index=False,
+            )
+        pd.DataFrame({"gene": genes, "zscore": [1.5, -0.5]}).to_csv(
+            deg_dir / "DEG_zscore_global.tsv",
+            sep="\t",
+            index=False,
+        )
+
+        pathway_path = temp_path / "toy_pathways.json"
+        with pathway_path.open("w", encoding="utf-8") as handle:
+            json.dump({"pathway_a": genes}, handle)
+
+        ppi_path = temp_path / "toy_ppi.tsv"
+        ppi_path.write_text("protein1\tprotein2\n", encoding="utf-8")
+
+        embedding_path = temp_path / "toy_view.pkl"
+        with embedding_path.open("wb") as handle:
+            pickle.dump(
+                {
+                    "G1": np.array([1.0, 0.0], dtype=np.float32),
+                    "G2": np.array([0.0, 1.0], dtype=np.float32),
+                },
+                handle,
+            )
+
+        output_dir = temp_path / "analysis_output"
+        config_path = run_dir / "asthma_config.py"
+        config_payload = {
+            "dataset": "toy",
+            "split_number": 0,
+            "seed": 0,
+            "biomarker_random_seed": 0,
+            "deterministic_training": False,
+            "adata_path": str(temp_path / "toy_data.h5ad"),
+            "label_column": "label",
+            "patient_column": "patient",
+            "celltype_column": "celltype",
+            "binary_positive_labels": ["pos"],
+            "binary_negative_labels": ["neg"],
+            "biomarker_output_dir": str(output_dir),
+            "biomarker_pathway_gene_set_path": str(pathway_path),
+            "splits_directory": str(splits_dir),
+            "ppi_path": str(ppi_path),
+            "k": 2,
+            "gnn_self_loop": True,
+            "cell_encoder_name": "graph_gat",
+            "gnn_hidden_dim": 4,
+            "gnn_num_layers": 1,
+            "gnn_num_heads": 1,
+            "gnn_dropout": 0.0,
+            "gnn_graph_readout": "mean",
+            "gnn_attention_logit_clamp": 5.0,
+            "gnn_expression_feature_scale": 1.0,
+            "gnn_max_message_memory_mb": 64.0,
+            "prior_absolute_enabled": False,
+            "prior_relational_enabled": False,
+            "prior_interface_num_heads": 1,
+            "prior_interface_dropout": 0.0,
+            "prior_interface_ffn_hidden_dim": 0,
+            "prior_knn_k": 1,
+            "prior_knn_symmetric": True,
+            "gene_embedding_views": {"toy_view": str(embedding_path)},
+            "mil_pooling": "mean",
+            "mil_attention_hidden_dim": 4,
+            "classifier_name": "linear",
+            "classifier_hidden_dim": 4,
+            "classifier_dropout": 0.0,
+            "biomarker_split": "test",
+            "biomarker_bags_per_patient": 1,
+            "biomarker_cells_per_bag": 2,
+            "biomarker_sample_mode": "proportional",
+            "biomarker_metric": "auprc",
+            "biomarker_patient_probability_reduction": "mean",
+            "biomarker_pathway_permutations": 1,
+            "biomarker_celltype_permutations": 1,
+            "biomarker_stability_enabled": False,
+            "biomarker_min_pathway_size": 1,
+            "biomarker_max_pathway_size": 10,
+            "biomarker_max_pathways": 1,
+            "biomarker_step1_celltype_mode": "all",
+            "biomarker_step1_top_k": 1,
+            "biomarker_step1_cum_weight": 1.0,
+            "biomarker_step1_weight_threshold": 0.0,
+            "split_train_only_preselection": False,
+        }
+        config_path.write_text("config = " + repr(config_payload) + "\n", encoding="utf-8")
+
+        config_ns, _ = biomarker.load_config_like_train_from_run_snapshot(str(config_path), dataset_hint="toy")
+        config_ns.adata_path = str(temp_path / "toy_data.h5ad")
+
+        edge_index, _ = impl_module.build_edge_index(genes, str(ppi_path), True)
+        regulation_onehot = impl_module.build_celltype_regulation_onehot(
+            "toy",
+            genes,
+            ["Bcell", "Tcell"],
+            deg_dir=str(deg_dir),
+        )
+        global_zscore, _, _ = impl_module.build_global_deg_zscore_vector("toy", genes, deg_dir=str(deg_dir))
+        protein_prior_embeddings = torch.zeros((len(genes), int(config_ns.gnn_hidden_dim)), dtype=torch.float32)
+
+        cell_encoder = impl_module.GraphCellEncoder(
+            num_nodes=len(genes),
+            hidden_dimension=int(config_ns.gnn_hidden_dim),
+            number_of_layers=int(config_ns.gnn_num_layers),
+            number_of_heads=int(config_ns.gnn_num_heads),
+            dropout_probability=float(config_ns.gnn_dropout),
+            edge_index=edge_index,
+            protein_prior_embeddings=protein_prior_embeddings,
+            global_zscore=global_zscore,
+            regulation_onehot=regulation_onehot,
+            num_celltypes=2,
+            num_treatments=1,
+            attention_logit_clamp=float(config_ns.gnn_attention_logit_clamp),
+            expression_feature_scale=float(config_ns.gnn_expression_feature_scale),
+            max_message_memory_mb=float(config_ns.gnn_max_message_memory_mb),
+            graph_readout=str(config_ns.gnn_graph_readout),
+            protein_prior_alpha=1.0,
+            protein_prior_alpha_learnable=False,
+            prior_injection_enabled=False,
+            prior_absolute_enabled=False,
+            prior_relational_enabled=False,
+            protein_prior_base_embeddings=None,
+            protein_prior_projection_hidden_dim=0,
+            protein_prior_projection_dropout=0.0,
+            protein_prior_projection_mode="find",
+            protein_prior_view_embeddings={
+                "toy_view": torch.tensor([[1.0, 0.0], [0.0, 1.0]], dtype=torch.float32)
+            },
+            prior_interface_num_heads=int(config_ns.prior_interface_num_heads),
+            prior_interface_dropout=float(config_ns.prior_interface_dropout),
+            prior_interface_ffn_hidden_dim=int(config_ns.prior_interface_ffn_hidden_dim),
+            prior_knn_k=int(config_ns.prior_knn_k),
+            prior_knn_symmetric=bool(config_ns.prior_knn_symmetric),
+            lambda_edge_bias=0.0,
+        )
+        mil_aggregator = impl_module.PatientMILAggregator(
+            embedding_dimension=int(config_ns.gnn_hidden_dim),
+            num_celltypes=2,
+            pooling=str(config_ns.mil_pooling),
+            attention_hidden_dimension=int(config_ns.mil_attention_hidden_dim),
+        )
+        classifier = impl_module.PatientClassifier(
+            input_dimension=int(config_ns.gnn_hidden_dim),
+            config=SimpleNamespace(
+                classifier_name="linear",
+                classifier_hidden_dim=int(config_ns.classifier_hidden_dim),
+                classifier_dropout=float(config_ns.classifier_dropout),
+            ),
+        )
+        torch.save(
+            {
+                "cell_encoder": cell_encoder.state_dict(),
+                "mil_aggregator": mil_aggregator.state_dict(),
+                "classifier": classifier.state_dict(),
+            },
+            run_dir / "best_checkpoint.pt",
+        )
+
+        split_payload = [[], [], [0, 1, 2, 3]]
+        with (splits_dir / "toy_idx_0.pkl").open("wb") as handle:
+            pickle.dump(split_payload, handle)
+
+        toy_obs = pd.DataFrame(
+            {
+                "label": ["neg", "neg", "pos", "pos"],
+                "patient": ["P0", "P0", "P1", "P1"],
+                "celltype": ["Bcell", "Tcell", "Bcell", "Tcell"],
+            }
+        )
+        toy_expression = np.asarray(
+            [
+                [1.0, 0.0],
+                [0.0, 1.0],
+                [0.5, 0.2],
+                [0.2, 0.5],
+            ],
+            dtype=np.float32,
+        )
+        toy_adata = ToyAdata(toy_expression, toy_obs, genes)
+
+        original_read_h5ad = impl_module.sc.read_h5ad
+        original_resolve_preselection_root = impl_module.resolve_preselection_root
+        impl_module.sc.read_h5ad = lambda path: toy_adata
+        impl_module.resolve_preselection_root = lambda config: str(preselection_root)
+        try:
+            result = biomarker.run_analysis_phase(
+                str(run_dir),
+                config_path=str(config_path),
+                output_dir=str(output_dir),
+                pathway_path=str(pathway_path),
+                gpu_index=-1,
+            )
+        finally:
+            impl_module.sc.read_h5ad = original_read_h5ad
+            impl_module.resolve_preselection_root = original_resolve_preselection_root
+
+        assert result["output_dir"] == str(output_dir)
+        assert result["dataset"] == "toy"
+        assert result["num_patients"] == 2
+        assert (output_dir / "final_biomarker.tsv").is_file()
+        assert (output_dir / "biomarker_metadata.json").is_file()
+
+
 def test_biomarker_forward_helpers_and_cli() -> None:
     torch.manual_seed(0)
 
@@ -405,6 +649,7 @@ def main() -> None:
     test_biomarker_endpoints_exist()
     test_biomarker_config_and_path_helpers()
     test_biomarker_feature_builders_and_metrics()
+    test_biomarker_run_analysis_phase_smoke()
     test_biomarker_forward_helpers_and_cli()
     print_success("biomarker endpoints")
 

@@ -1284,9 +1284,15 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
-    args = parse_args()
-    run_dir = os.path.abspath(str(args.run_dir).strip())
+def run_analysis_phase(
+    run_dir: str,
+    *,
+    config_path: str = "",
+    output_dir: str = "",
+    pathway_path: str = "",
+    gpu_index: int | None = None,
+) -> Dict[str, object]:
+    run_dir = os.path.abspath(str(run_dir).strip())
     if not os.path.isdir(run_dir):
         raise FileNotFoundError(f"run_dir not found: {run_dir}")
 
@@ -1298,10 +1304,13 @@ def main() -> None:
         if dataset_value is not None and str(dataset_value).strip() != "":
             dataset_hint = str(dataset_value).strip()
 
-    config_path = locate_run_snapshot_config_path(run_dir=run_dir, cli_config=str(args.config))
-    config, config_dict = load_config_like_train_from_run_snapshot(config_path, dataset_hint=dataset_hint)
+    resolved_config_path = locate_run_snapshot_config_path(run_dir=run_dir, cli_config=str(config_path))
+    config, config_dict = load_config_like_train_from_run_snapshot(
+        resolved_config_path,
+        dataset_hint=dataset_hint,
+    )
 
-    config_resolution_base_dirs = build_resolution_base_dirs(config_path=config_path, run_dir=run_dir)
+    config_resolution_base_dirs = build_resolution_base_dirs(config_path=resolved_config_path, run_dir=run_dir)
 
     # If the run directory contains run_config.json (train_new output), use it to fill in
     # missing dataset/split info and to override stale relative paths. This does NOT
@@ -1346,31 +1355,35 @@ def main() -> None:
     ensure_binary_label_lists(config)
 
     output_dir_cfg = str(getattr(config, "biomarker_output_dir", "")).strip()
-    output_dir = str(args.out_dir).strip() or output_dir_cfg or os.path.join(run_dir, "biomarker")
-    if not os.path.isabs(output_dir):
+    output_dir_value = str(output_dir).strip() or output_dir_cfg or os.path.join(run_dir, "biomarker")
+    if not os.path.isabs(output_dir_value):
         output_dir = resolve_path_with_base_dirs(
             config_resolution_base_dirs,
-            output_dir,
+            output_dir_value,
             prefer_existing=False,
         )
+    else:
+        output_dir = os.path.abspath(output_dir_value)
     os.makedirs(output_dir, exist_ok=True)
 
     pathway_path_cfg = str(
         getattr(config, "biomarker_pathway_gene_set_path", getattr(config, "pathway_gene_set_path", ""))
     ).strip()
-    pathway_path = str(args.pathway_path).strip() or pathway_path_cfg
-    if pathway_path == "":
+    pathway_path_value = str(pathway_path).strip() or pathway_path_cfg
+    if pathway_path_value == "":
         raise ValueError(
-            "Pathway file must be provided via --pathway_path or config.biomarker_pathway_gene_set_path"
+            "Pathway file must be provided via pathway_path or config.biomarker_pathway_gene_set_path"
         )
-    if not os.path.isabs(pathway_path):
+    if not os.path.isabs(pathway_path_value):
         pathway_path = resolve_path_with_base_dirs(
             config_resolution_base_dirs,
-            pathway_path,
+            pathway_path_value,
             prefer_existing=True,
         )
+    else:
+        pathway_path = os.path.abspath(pathway_path_value)
 
-    device = resolve_device(args.gpu, config)
+    device = resolve_device(gpu_index, config)
     print(f"[Runtime] device={device}", flush=True)
 
     seed = int(getattr(config, "biomarker_random_seed", getattr(config, "seed", 0)))
@@ -2416,7 +2429,7 @@ def main() -> None:
                 handle.flush()
 
     metadata_out = {
-        "config_path": config_path,
+        "config_path": resolved_config_path,
         "run_dir": run_dir,
         "output_dir": output_dir,
         "dataset": str(config.dataset),
@@ -2472,6 +2485,19 @@ def main() -> None:
         "celltype_gene_biomarker.tsv, gene_ranking_stability.tsv, pathway_ranking_stability.tsv, "
         "final_biomarker.tsv, final_biomarker_stability.tsv",
         flush=True,
+    )
+
+    return metadata_out
+
+
+def main() -> None:
+    args = parse_args()
+    run_analysis_phase(
+        args.run_dir,
+        config_path=str(args.config),
+        output_dir=str(args.out_dir),
+        pathway_path=str(args.pathway_path),
+        gpu_index=args.gpu,
     )
 
 

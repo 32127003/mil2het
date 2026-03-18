@@ -68,6 +68,7 @@ __all__ = [
     "forward_bag_from_expression",
     "forward_bag_from_embeddings",
     "sample_rows_with_replacement",
+    "run_analysis_phase",
     "parse_args",
     "main",
 ]
