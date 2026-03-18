@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import textwrap
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -30,6 +31,8 @@ SPLIT_DATASET_ENDPOINTS = [
     "build_and_save_folds",
     "run_split_generation",
     "build_split_config_from_cli_args",
+    "build_split_arg_parser",
+    "load_split_config_from_cli",
 ]
 
 
@@ -165,10 +168,64 @@ def test_split_dataset_build_and_save_folds() -> None:
             assert expected.is_file(), f"missing split artifact: {expected}"
 
 
+def test_split_dataset_load_config_from_cli() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        adata_path = temp_path / "config_toy_data.h5ad"
+
+        adata = sc.AnnData(X=np.random.randn(18, 4).astype(np.float32))
+        adata.obs["patient_id"] = [f"p{i // 3}" for i in range(18)]
+        adata.obs["label"] = [str((i // 3) % 2) for i in range(18)]
+        adata.obs["sample_id"] = [f"s{i // 3}" for i in range(18)]
+        adata.write_h5ad(adata_path)
+
+        config_path = temp_path / "workflow.yaml"
+        override_root = temp_path / "override_output"
+        config_path.write_text(
+            textwrap.dedent(
+                f"""
+                workflow:
+                  input_h5ad: "{adata_path}"
+                  output_root: "{temp_path / 'base_output'}"
+                  num_folds: 3
+                  seed: 0
+                columns:
+                  patient: patient_id
+                  label: label
+                  sample: sample_id
+                labels:
+                  positive: ["1"]
+                  negative: ["0"]
+                """
+            ).strip()
+            + "\n",
+            encoding="utf-8",
+        )
+
+        config = split_dataset.load_split_config_from_cli(
+            ["--config", str(config_path), "--output-dir", str(override_root)]
+        )
+        assert config.dataset == "config_toy"
+        assert config.splits_directory == str(override_root / "splits")
+        assert config.output_dir == str(override_root / "splits")
+
+        split_dataset.run_split_generation(config)
+
+        expected_files = [
+            override_root / "splits" / "config_toy_idx_0.pkl",
+            override_root / "splits" / "config_toy_idx_1.pkl",
+            override_root / "splits" / "config_toy_idx_2.pkl",
+            override_root / "splits" / "split_description.txt",
+        ]
+        for expected in expected_files:
+            assert expected.is_file(), f"missing split artifact: {expected}"
+
+
 def main() -> None:
     test_split_dataset_endpoints_exist()
     test_split_dataset_utilities()
     test_split_dataset_build_and_save_folds()
+    test_split_dataset_load_config_from_cli()
     print_success("split_dataset endpoints")
 
 

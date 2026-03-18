@@ -49,4 +49,6 @@ __all__ = [
     "run_split_preselection",
     "build_legacy_preselection_config",
     "build_preselection_config_from_cli_args",
+    "build_preselection_arg_parser",
+    "load_preselection_config_from_cli",
 ]

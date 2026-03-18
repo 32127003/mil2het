@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pickle
 import tempfile
+import textwrap
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -35,6 +36,8 @@ PRESELECTION_ENDPOINTS = [
     "run_split_preselection",
     "build_legacy_preselection_config",
     "build_preselection_config_from_cli_args",
+    "build_preselection_arg_parser",
+    "load_preselection_config_from_cli",
 ]
 
 
@@ -271,11 +274,72 @@ def test_run_split_preselection_with_explicit_inputs() -> None:
         assert (Path(output_root) / "split_0" / "NP" / "NP_max.tsv").is_file()
 
 
+def test_preselection_load_config_from_cli() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        ppi_path = temp_path / "ppi.tsv"
+        ppi_path.write_text("G1\tG2\nG2\tG3\nG3\tG4\n", encoding="utf-8")
+
+        adata = build_deg_adata()
+        adata.obs["patient_id"] = [f"p{i // 4}" for i in range(adata.n_obs)]
+        adata_path = temp_path / "config_preselection_data.h5ad"
+        adata.write_h5ad(adata_path)
+
+        splits_dir = temp_path / "splits"
+        splits_dir.mkdir(parents=True)
+        with (splits_dir / "config_preselection_idx_0.pkl").open("wb") as file_handle:
+            pickle.dump(
+                [
+                    list(range(10)) + list(range(20, 30)),
+                    list(range(10, 15)) + list(range(30, 35)),
+                    list(range(15, 20)) + list(range(35, 40)),
+                ],
+                file_handle,
+            )
+
+        config_path = temp_path / "workflow.yaml"
+        override_root = temp_path / "override_output"
+        config_path.write_text(
+            textwrap.dedent(
+                f"""
+                workflow:
+                  input_h5ad: "{adata_path}"
+                  output_root: "{temp_path / 'base_output'}"
+                  num_folds: 1
+                columns:
+                  label: label
+                  celltype: celltype
+                resources:
+                  ppi_path: "{ppi_path}"
+                labels:
+                  positive: ["1"]
+                  negative: ["0"]
+                splits_directory: "{splits_dir}"
+                """
+            ).strip()
+            + "\n",
+            encoding="utf-8",
+        )
+
+        config = preselection.load_preselection_config_from_cli(
+            ["--config", str(config_path), "--output-dir", str(override_root)]
+        )
+        assert config.dataset == "config_preselection"
+        assert config.splits_directory == str(splits_dir)
+        assert config.out_dir == str(override_root / "preselection")
+
+        output_root = preselection.run_split_preselection(config)
+        assert output_root == str(override_root / "preselection")
+        assert (Path(output_root) / "split_0" / "DEG" / "DEG_merged.tsv").is_file()
+        assert (Path(output_root) / "split_0" / "NP" / "NP_max.tsv").is_file()
+
+
 def main() -> None:
     test_preselection_endpoints_exist()
     test_preselection_io_and_deg_helpers()
     test_preselection_rwr_and_pipeline()
     test_run_split_preselection_with_explicit_inputs()
+    test_preselection_load_config_from_cli()
     print_success("preselection endpoints")
 
 

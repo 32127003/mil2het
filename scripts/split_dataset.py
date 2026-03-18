@@ -21,6 +21,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from scbiomarker.config import parse_workflow_cli_args
 from modules.utils import *
 from configs.config import *
 
@@ -635,7 +636,8 @@ def build_split_config_from_cli_args(args):
     }
     return dict2namespace(config_dict)
 
-if __name__ == "__main__":
+
+def build_split_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Create 5-fold dataset splits.")
     parser.add_argument("--dataset", type=str, required=False, help="Legacy dataset preset name.")
     parser.add_argument("--dataset-name", type=str, default=None, help="Explicit dataset/output prefix.")
@@ -649,8 +651,23 @@ if __name__ == "__main__":
     parser.add_argument("--num-valid-patients", type=int, default=None, help="Target validation-patient count.")
     parser.add_argument("--positive-label", dest="binary_positive_labels", action="append", default=None)
     parser.add_argument("--negative-label", dest="binary_negative_labels", action="append", default=None)
-    args = parser.parse_args()
-    config = build_split_config_from_cli_args(args)
+    return parser
 
+
+def load_split_config_from_cli(argv: Optional[Sequence[str]] = None):
+    argv_list = list(sys.argv[1:] if argv is None else argv)
+    if "--config" in argv_list or "--adata" in argv_list:
+        config = parse_workflow_cli_args(argv_list).config
+        if str(getattr(config, "output_dir", "") or "").strip() == "":
+            config.output_dir = str(getattr(config, "splits_directory", "") or "")
+        return config
+
+    parser = build_split_arg_parser()
+    args = parser.parse_args(argv_list)
+    return build_split_config_from_cli_args(args)
+
+
+if __name__ == "__main__":
+    config = load_split_config_from_cli()
     print(f"Configuration: {config}")
     run_split_generation(config)

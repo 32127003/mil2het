@@ -22,6 +22,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from scbiomarker.config import parse_workflow_cli_args
 from modules.utils import *
 from configs.config import *
 
@@ -1202,12 +1203,7 @@ def build_preselection_config_from_cli_args(args):
     return dict2namespace(config_dict)
 
 
-
-
-
-
-
-if __name__ == "__main__":
+def build_preselection_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Split-aware preselection for DEG/NP (split-train-only).")
     parser.add_argument("--dataset", type=str, required=False, help="Legacy dataset preset name.")
     parser.add_argument("--dataset-name", type=str, default=None, help="Explicit dataset/output prefix.")
@@ -1226,7 +1222,31 @@ if __name__ == "__main__":
     parser.add_argument("--convergence-threshold-l1", type=float, default=None)
     parser.add_argument("--max-iterations", type=int, default=None)
     parser.add_argument("--directed", action="store_true")
-    args = parser.parse_args()
-    config = build_preselection_config_from_cli_args(args)
+    return parser
+
+
+def load_preselection_config_from_cli(argv: Optional[Sequence[str]] = None):
+    argv_list = list(sys.argv[1:] if argv is None else argv)
+    if "--config" in argv_list or "--adata" in argv_list:
+        config = parse_workflow_cli_args(argv_list).config
+        output_root = str(getattr(config, "preselection_output_root", "") or "")
+        if str(getattr(config, "out_dir", "") or "").strip() == "" and output_root != "":
+            config.out_dir = output_root
+        if str(getattr(config, "output_dir", "") or "").strip() == "" and output_root != "":
+            config.output_dir = output_root
+        return config
+
+    parser = build_preselection_arg_parser()
+    args = parser.parse_args(argv_list)
+    return build_preselection_config_from_cli_args(args)
+
+
+
+
+
+
+
+if __name__ == "__main__":
+    config = load_preselection_config_from_cli()
     print(f"Configuration: {config}")
     run_split_preselection(config)
