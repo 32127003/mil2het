@@ -13,6 +13,7 @@ SMOKE_TEST_SCRIPTS = [
     "smoke_test_split_dataset_endpoints.py",
     "smoke_test_preselection_endpoints.py",
     "smoke_test_train_endpoints.py",
+    "smoke_test_pipeline_endpoints.py",
 ]
 
 

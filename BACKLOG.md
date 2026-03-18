@@ -18,7 +18,7 @@
 - [x] T-004: generalize split/preselection to explicit h5ad, column, and PPI inputs
 - [x] T-005: support arbitrary named multi-view gene embedding inputs
 - [x] T-006: extract reusable train/analysis phase APIs from script-style entrypoints
-- [ ] T-007: add a top-level end-to-end Python pipeline API
+- [x] T-007: add a top-level end-to-end Python pipeline API
 - [ ] T-008: add a package CLI entrypoint with phase control and config overrides
 - [ ] T-009: validate the installable workflow end-to-end and document it in the test project
 

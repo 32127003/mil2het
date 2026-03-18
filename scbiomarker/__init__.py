@@ -8,6 +8,7 @@ from . import (
     MultipleInstanceLearning,
     biomarker,
     config,
+    pipeline,
     preselection,
     prior_interface_find,
     split_dataset,
@@ -22,6 +23,8 @@ def __getattr__(name: str) -> Any:
         "GatedAttentionMIL": ("scbiomarker.MultipleInstanceLearning", "GatedAttentionMIL"),
         "PatientMILAggregator": ("scbiomarker.MultipleInstanceLearning", "PatientMILAggregator"),
         "MultiViewPriorInterfaceFIND": ("scbiomarker.prior_interface_find", "MultiViewPriorInterfaceFIND"),
+        "PipelineResult": ("scbiomarker.pipeline", "PipelineResult"),
+        "run_pipeline": ("scbiomarker.pipeline", "run_pipeline"),
     }
     if name in lazy_exports:
         module_name, attr_name = lazy_exports[name]
@@ -36,6 +39,7 @@ __all__ = [
     "config",
     "prior_interface_find",
     "biomarker",
+    "pipeline",
     "split_dataset",
     "preselection",
     "train",
@@ -44,4 +48,6 @@ __all__ = [
     "GatedAttentionMIL",
     "PatientMILAggregator",
     "MultiViewPriorInterfaceFIND",
+    "PipelineResult",
+    "run_pipeline",
 ]
