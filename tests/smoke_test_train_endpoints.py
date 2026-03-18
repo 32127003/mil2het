@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import pickle
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -130,6 +131,64 @@ def test_train_model_spec_embeddings_and_optimizer() -> None:
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
+
+        custom_embedding_path = temp_path / "llm_view.pkl"
+        with custom_embedding_path.open("wb") as file_handle:
+            pickle.dump(
+                {
+                    "G1": np.array([1.0, 0.0], dtype=np.float32),
+                    "G2": np.array([0.0, 1.0], dtype=np.float32),
+                    "G3": np.array([1.0, 1.0], dtype=np.float32),
+                },
+                file_handle,
+            )
+
+        custom_config = SimpleNamespace(
+            protein_embedding_choice="concat",
+            prior_view_sources=["LLM_view"],
+            protein_embedding_paths={"LLM_view": str(custom_embedding_path)},
+            protein_embedding_merged_cache_path=str(temp_path / "custom_cache.pkl"),
+            dataset="toy",
+            split_preselection_subdir="split_preselection",
+            split_number=0,
+            k=2,
+        )
+        custom_by_view = train.load_prior_embeddings_by_view(
+            genes=["G1", "G2"],
+            view_names=["LLM_view"],
+            config=custom_config,
+        )
+        assert set(custom_by_view.keys()) == {"LLM_view"}
+        assert custom_by_view["LLM_view"].shape == (2, 2)
+
+        missing_embedding_path = temp_path / "missing_view.pkl"
+        with missing_embedding_path.open("wb") as file_handle:
+            pickle.dump(
+                {
+                    "G1": np.array([1.0, 0.0], dtype=np.float32),
+                },
+                file_handle,
+            )
+        missing_config = SimpleNamespace(
+            protein_embedding_choice="concat",
+            prior_view_sources=["Missing_view"],
+            protein_embedding_paths={"Missing_view": str(missing_embedding_path)},
+            protein_embedding_merged_cache_path=str(temp_path / "missing_cache.pkl"),
+            dataset="toy",
+            split_preselection_subdir="split_preselection",
+            split_number=0,
+            k=2,
+        )
+        try:
+            train.load_prior_embeddings_by_view(
+                genes=["G1", "G2"],
+                view_names=["Missing_view"],
+                config=missing_config,
+            )
+        except ValueError as error:
+            assert "missing 1" in str(error)
+        else:
+            raise AssertionError("expected missing-gene embedding load to fail loudly")
 
         impl_module = train._load_impl_module()
         original_loader = impl_module.load_protein_embedding_dict

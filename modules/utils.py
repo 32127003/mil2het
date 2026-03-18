@@ -565,14 +565,20 @@ def _save_embedding_dict_to_path(
 
 
 def _resolve_embedding_path(embedding_name: str, embedding_paths: Optional[Dict[str, str]] = None) -> str:
-    canonical_name = _canonical_embedding_name(embedding_name)
     if isinstance(embedding_paths, dict):
         for key, value in embedding_paths.items():
+            key_text = str(key).strip()
+            if key_text == "":
+                continue
+            if key_text == str(embedding_name).strip():
+                return str(value)
             try:
-                if _canonical_embedding_name(str(key)) == canonical_name:
+                if _canonical_embedding_name(key_text) == _canonical_embedding_name(embedding_name):
                     return str(value)
             except ValueError:
-                continue
+                if key_text.lower() == str(embedding_name).strip().lower():
+                    return str(value)
+    canonical_name = _canonical_embedding_name(embedding_name)
     return DEFAULT_PROTEIN_EMBEDDING_PATHS[canonical_name]
 
 
@@ -581,8 +587,22 @@ def load_protein_embedding_dict(
     embedding_path: Optional[str] = None,
     embedding_paths: Optional[Dict[str, str]] = None,
 ) -> Dict[str, np.ndarray]:
-    canonical_name = _canonical_embedding_name(embedding_name)
-    resolved_path = str(embedding_path) if embedding_path else _resolve_embedding_path(canonical_name, embedding_paths)
+    if embedding_path:
+        resolved_path = str(embedding_path)
+        canonical_name = str(embedding_name).strip()
+    else:
+        try:
+            canonical_name = _canonical_embedding_name(embedding_name)
+        except ValueError:
+            canonical_name = str(embedding_name).strip()
+        try:
+            resolved_path = _resolve_embedding_path(canonical_name, embedding_paths)
+        except ValueError as error:
+            raise ValueError(
+                "Unknown protein embedding source name. "
+                "Provide a matching entry in protein_embedding_paths / embedding_views for arbitrary view names. "
+                f"source={embedding_name!r}"
+            ) from error
 
     candidate_paths = [resolved_path]
     if canonical_name == "node2vec":

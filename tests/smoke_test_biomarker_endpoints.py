@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import pickle
 import sys
 import tempfile
 from pathlib import Path
@@ -185,6 +186,50 @@ def test_biomarker_feature_builders_and_metrics() -> None:
         assert zscore_vector.shape == (3,)
         assert os.path.basename(zscore_path) == "DEG_zscore_global.tsv"
         assert missing == 1
+
+        custom_embedding_path = temp_path / "llm_view.pkl"
+        with custom_embedding_path.open("wb") as file_handle:
+            pickle.dump(
+                {
+                    "G1": np.array([1.0, 0.0], dtype=np.float32),
+                    "G2": np.array([0.0, 1.0], dtype=np.float32),
+                    "G3": np.array([1.0, 1.0], dtype=np.float32),
+                },
+                file_handle,
+            )
+        custom_config = SimpleNamespace(
+            protein_embedding_paths={"LLM_view": str(custom_embedding_path)},
+            protein_embedding_choice="concat",
+            protein_embedding_sources=["LLM_view"],
+            gnn_hidden_dim=4,
+        )
+        custom_by_view = biomarker.load_prior_embeddings_by_view(
+            genes=["G1", "G2"],
+            view_names=["LLM_view"],
+            config=custom_config,
+        )
+        assert set(custom_by_view.keys()) == {"LLM_view"}
+        assert custom_by_view["LLM_view"].shape == (2, 2)
+
+        missing_embedding_path = temp_path / "missing_view.pkl"
+        with missing_embedding_path.open("wb") as file_handle:
+            pickle.dump({"G1": np.array([1.0, 0.0], dtype=np.float32)}, file_handle)
+        missing_config = SimpleNamespace(
+            protein_embedding_paths={"Missing_view": str(missing_embedding_path)},
+            protein_embedding_choice="concat",
+            protein_embedding_sources=["Missing_view"],
+            gnn_hidden_dim=4,
+        )
+        try:
+            biomarker.load_prior_embeddings_by_view(
+                genes=["G1", "G2"],
+                view_names=["Missing_view"],
+                config=missing_config,
+            )
+        except ValueError as error:
+            assert "missing 1" in str(error)
+        else:
+            raise AssertionError("expected missing-gene biomarker load to fail loudly")
 
     impl_module = biomarker._load_impl_module()
     original_loader = impl_module.load_protein_embedding_dict

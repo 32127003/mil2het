@@ -2726,12 +2726,13 @@ if __name__ == "__main__":
             "At least one embedding view is required for FIND prior interface. "
             "Set gene_embedding_views/protein_embedding_paths or prior_view_sources."
         )
+    configured_embedding_paths = _normalized_configured_embedding_paths(config)
     genes, maximum_genes = load_k_np_genes(
         config.dataset,
         config.k,
         preselection_root=preselection_root,
         required_embedding_sources=required_embedding_sources,
-        embedding_paths=_normalized_configured_embedding_paths(config),
+        embedding_paths=configured_embedding_paths,
     )
     print(f"Loaded preselected {len(genes)} genes from gene space (maximum {len(maximum_genes)})", flush=True)
     print(f"Loaded {len(genes)} genes after embedding coverage check", flush=True)
