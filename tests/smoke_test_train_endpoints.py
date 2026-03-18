@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
+import scanpy as sc
 import torch
 
 from scbiomarker import CellEncoder, MultipleInstanceLearning, train
@@ -33,6 +34,10 @@ TRAIN_ENDPOINTS = [
     "build_experiment_directory",
     "build_optimizer",
     "run_epoch",
+    "run_training_phase",
+    "build_train_arg_parser",
+    "build_train_config_from_cli_args",
+    "load_train_config_from_cli",
 ]
 
 
@@ -340,10 +345,206 @@ def test_train_model_spec_embeddings_and_optimizer() -> None:
     assert callable(train.run_epoch)
 
 
+def test_train_run_training_phase_direct_call() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+
+        adata = sc.AnnData(X=np.random.randn(6, 4).astype(np.float32))
+        adata.var_names = pd.Index(["G1", "G2", "G3", "G4"])
+        adata.obs["patient_id"] = [f"p{i // 2}" for i in range(6)]
+        adata.obs["label"] = ["1", "1", "0", "0", "1", "0"]
+        adata.obs["celltype"] = ["T", "B", "T", "B", "T", "B"]
+        adata_path = temp_path / "toy_data.h5ad"
+        adata.write_h5ad(adata_path)
+
+        splits_dir = temp_path / "splits"
+        splits_dir.mkdir(parents=True)
+        with (splits_dir / "toy_idx_0.pkl").open("wb") as file_handle:
+            pickle.dump([[0, 1], [2, 3], [4, 5]], file_handle)
+
+        preselection_root = temp_path / "preselection" / "split_0"
+        (preselection_root / "DEG").mkdir(parents=True)
+        (preselection_root / "NP").mkdir(parents=True)
+
+        config = train.build_train_config_from_cli_args(
+            SimpleNamespace(dataset="asthma", seed=0, gpu=0, split_number=0)
+        )
+        config.dataset = "toy"
+        config.seed = 0
+        config.gpu = 0
+        config.split_number = 0
+        config.adata_path = str(adata_path)
+        config.adata_directory = str(temp_path)
+        config.splits_directory = str(splits_dir)
+        config.preselection_root = str(preselection_root)
+        config.experiment_root = str(temp_path / "experiment")
+        config.patient_column = "patient_id"
+        config.label_column = "label"
+        config.celltype_column = "celltype"
+        config.treatment_column = None
+        config.binary_positive_labels = ["1"]
+        config.binary_negative_labels = ["0"]
+        config.epochs = 5
+        config.early_stopping_patience = 10
+        config.deterministic_training = False
+        config.deterministic_algorithms = False
+        config.deterministic_warn_only = False
+        config.prior_view_sources = ["custom_view"]
+        config.gene_embedding_views = {"custom_view": str(temp_path / "custom_view.pkl")}
+        config.protein_embedding_paths = dict(config.gene_embedding_views)
+
+        impl_module = train._load_impl_module()
+        patched_names = [
+            "ensure_cublas_workspace_config",
+            "configure_runtime_backends",
+            "build_experiment_directory",
+            "load_k_np_genes",
+            "build_graph_cache",
+            "load_prior_embeddings_by_view",
+            "resolve_cell_encoder_spec",
+            "build_split_records_cache",
+            "run_epoch",
+            "PatientMILAggregator",
+            "PatientClassifier",
+        ]
+        originals = {name: getattr(impl_module, name) for name in patched_names}
+
+        class DummyEncoder(torch.nn.Module):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+                del args, kwargs
+                self.weight = torch.nn.Parameter(torch.zeros(1))
+
+            def set_node_feature_beta(self, value: float) -> None:
+                self.node_feature_beta = float(value)
+
+        class DummyStack(torch.nn.Module):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+                del args, kwargs
+                self.weight = torch.nn.Parameter(torch.zeros(1))
+
+        def fake_build_experiment_directory(cfg):
+            del cfg
+            output_dir = temp_path / "run"
+            cache_dir = output_dir / "cache"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            return {
+                "output_dir": str(output_dir),
+                "cache_dir": str(cache_dir),
+                "history_path": str(output_dir / "history.csv"),
+                "train_step_log_path": str(output_dir / "train_step_metrics.csv"),
+                "val_step_log_path": str(output_dir / "val_step_metrics.csv"),
+                "test_step_log_path": str(output_dir / "test_step_metrics.csv"),
+                "best_model_path": str(output_dir / "best_model.pt"),
+                "best_checkpoint_path": str(output_dir / "best_checkpoint.pt"),
+                "last_checkpoint_path": str(output_dir / "last_checkpoint.pt"),
+                "epoch5_checkpoint_path": str(output_dir / "epoch5_checkpoint.pt"),
+            }
+
+        def fake_load_k_np_genes(*args, **kwargs):
+            del args, kwargs
+            return ["G1", "G2"], ["G1", "G2"]
+
+        def fake_build_graph_cache(*args, **kwargs):
+            del args, kwargs
+            return (
+                torch.zeros((2, 0), dtype=torch.long),
+                torch.zeros((1, 2, 3), dtype=torch.float32),
+                torch.zeros((2,), dtype=torch.float32),
+                False,
+                {},
+            )
+
+        def fake_load_prior_embeddings_by_view(*args, **kwargs):
+            del args, kwargs
+            return {"custom_view": torch.zeros((2, 2), dtype=torch.float32)}
+
+        def fake_resolve_cell_encoder_spec(*args, **kwargs):
+            del args, kwargs
+            return {
+                "name": "dummy",
+                "encoder_class": DummyEncoder,
+                "hidden_dimension": 8,
+                "number_of_layers": 1,
+                "number_of_heads": 1,
+                "dropout_probability": 0.0,
+                "graph_readout": "mean",
+                "cell_embedding_dimension": 8,
+            }
+
+        def fake_build_split_records_cache(*args, **kwargs):
+            del args, kwargs
+            record = {"patient_index": 0, "patient_label": 1, "cell_indices": np.array([0, 1]), "bag_repeat_index": 0}
+            return [record], [record], [record], False
+
+        def fake_run_epoch(*args, **kwargs):
+            epoch = int(kwargs.get("epoch", 0))
+            split_name = str(kwargs.get("split_name", "train"))
+            del args
+            metric_base = 0.5 + 0.05 * float(epoch)
+            metrics = {
+                "loss": metric_base,
+                "task_loss": metric_base - 0.05,
+                "smooth_loss": 0.0,
+                "sparse_loss": 0.0,
+                "cons_loss": 0.0,
+                "total_loss": metric_base,
+                "loss_bce": metric_base - 0.1,
+                "loss_mixup": 0.0,
+                "effective_lambda_smooth": 0.0,
+                "effective_lambda_sparse": 0.0,
+                "effective_lambda_cons": 0.0,
+                "prior_strategy": "absolute=1,relational=1",
+                "prior_strategy_regularizer_multiview_knn": True,
+                "prior_strategy_hidden_additive": True,
+                "node_feature_beta": 1.0,
+                "mixup_alpha": 0.0,
+                "lambda_sparse": 0.0,
+                "lambda_edge_bias": 0.0,
+                "node_score_mean": 0.0,
+                "node_score_abs_mean": 0.0,
+                "accuracy": metric_base,
+                "precision": metric_base,
+                "recall": metric_base,
+                "auprc": metric_base,
+                "auroc": metric_base,
+                "f1": metric_base,
+                "brier": 1.0 - metric_base,
+                "num_patients": 1.0,
+                "num_bags": 1.0,
+            }
+            rows = [{"epoch": epoch, "split": split_name, "metric": metric_base}]
+            return metrics, rows, rows, rows
+
+        try:
+            impl_module.build_experiment_directory = fake_build_experiment_directory
+            impl_module.load_k_np_genes = fake_load_k_np_genes
+            impl_module.build_graph_cache = fake_build_graph_cache
+            impl_module.load_prior_embeddings_by_view = fake_load_prior_embeddings_by_view
+            impl_module.resolve_cell_encoder_spec = fake_resolve_cell_encoder_spec
+            impl_module.build_split_records_cache = fake_build_split_records_cache
+            impl_module.run_epoch = fake_run_epoch
+            impl_module.PatientMILAggregator = DummyStack
+            impl_module.PatientClassifier = DummyStack
+            impl_module.ensure_cublas_workspace_config = lambda: None
+            impl_module.configure_runtime_backends = lambda **kwargs: None
+
+            artifacts = train.run_training_phase(config, device=torch.device("cpu"))
+        finally:
+            for name, original in originals.items():
+                setattr(impl_module, name, original)
+
+        assert Path(artifacts["output_dir"]).is_dir()
+        assert Path(artifacts["best_checkpoint_path"]).is_file()
+
+
 def main() -> None:
     test_train_endpoints_exist()
     test_train_runtime_and_dataset_helpers()
     test_train_model_spec_embeddings_and_optimizer()
+    test_train_run_training_phase_direct_call()
     print_success("train endpoints")
 
 

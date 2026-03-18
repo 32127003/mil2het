@@ -2610,48 +2610,27 @@ def build_optimizer(
 
 
 
-if __name__ == "__main__":
-
+def run_training_phase(config, *, device=None):
     ensure_cublas_workspace_config()
-    parser = argparse.ArgumentParser(description="Train scGOAT + MIL patient classifier")
-    parser.add_argument("--dataset", required=True, help="dataset name, e.g. asthma")
-    parser.add_argument("--seed", required=False, type=int, default=42, help="random seed for reproducibility")
-    parser.add_argument("--gpu", required=True, type=int, help="cuda device index")
-    parser.add_argument("--split-number", required=True, type=int, help="split index")
 
-
-    args = parser.parse_args()
-    args_dict = args.__dict__
-
-    if args.dataset == 'asthma':
-        args_dict.update(asthma_train_configuration)
-    elif args.dataset == 'asthma_ext':
-        args_dict.update(asthma_ext_train_configuration)    
-    elif args.dataset == 'vitiligo':
-        args_dict.update(vitiligo_train_configuration)
-    elif args.dataset == 'covid':
-        args_dict.update(covid_train_configuration)
-    else:
-        raise ValueError(
-            f"Unsupported dataset: {args.dataset}, custom split configuration is required for new datasets."
-        )
-    config = dict2namespace(args_dict)
-
-    print(config)
-    
-
-    if not torch.cuda.is_available():
-        raise RuntimeError("CUDA is required for this training script.")
-    print(f"{config.gpu}: datatype={type(config.gpu)} value={config.gpu}")
-    if int(config.gpu) < 0 or int(config.gpu) >= int(torch.cuda.device_count()):
-        raise ValueError(
-            f"gpu index {config.gpu} not in {int(torch.cuda.device_count())} visible CUDA devices."
-        )
-    if torch.cuda.is_available():
+    seed = int(getattr(config, "seed", 42))
+    if device is None:
+        if not torch.cuda.is_available():
+            raise RuntimeError("CUDA is required for this training script.")
+        print(f"{config.gpu}: datatype={type(config.gpu)} value={config.gpu}")
+        if int(config.gpu) < 0 or int(config.gpu) >= int(torch.cuda.device_count()):
+            raise ValueError(
+                f"gpu index {config.gpu} not in {int(torch.cuda.device_count())} visible CUDA devices."
+            )
         device = torch.device(f"cuda:{config.gpu}")
         torch.cuda.set_device(device)
+    else:
+        device = torch.device(device)
+        print(f"{device}: using provided device override", flush=True)
+
+    print(config)
     configure_runtime_backends(device=device, deterministic_training=bool(config.deterministic_training))
-    set_global_seed(int(args.seed), deterministic=bool(config.deterministic_training))
+    set_global_seed(seed, deterministic=bool(config.deterministic_training))
     if config.deterministic_algorithms:
         torch.use_deterministic_algorithms(True, warn_only=bool(config.deterministic_warn_only))
     artifacts = build_experiment_directory(config)
@@ -2671,8 +2650,11 @@ if __name__ == "__main__":
     shutil.copy2(config_module_file, os.path.join(artifacts["output_dir"], os.path.basename(config_module_file)))
     
 
-    print(f"Loading adata: {config.adata_directory}/{config.dataset}_data.h5ad", flush=True)
-    adata = sc.read_h5ad(str(config.adata_directory) +f"/{config.dataset}" + f"/{config.dataset}_data.h5ad")
+    adata_path = str(getattr(config, "adata_path", "") or getattr(config, "input_h5ad", "") or "").strip()
+    if adata_path == "":
+        adata_path = str(config.adata_directory) + f"/{config.dataset}" + f"/{config.dataset}_data.h5ad"
+    print(f"Loading adata: {adata_path}", flush=True)
+    adata = sc.read_h5ad(str(adata_path))
 
     if config.treatment_column is not None and str(config.treatment_column).strip() != "":
         treatment_column = str(config.treatment_column)
@@ -2706,7 +2688,11 @@ if __name__ == "__main__":
     patient_index_to_name = {int(index): str(name) for name, index in patient_mapping.items()}
 
     print("loading preselection data...", flush=True)
-    preselection_root = os.path.join(PROJECT_ROOT,"data", config.dataset, "preselection", f"split_{int(config.split_number)}",)
+    preselection_root = str(
+        getattr(config, "preselection_root", "")
+        or getattr(config, "preselection_output_root", "")
+        or os.path.join(PROJECT_ROOT, "data", config.dataset, "preselection", f"split_{int(config.split_number)}")
+    )
     if not os.path.isdir(preselection_root):
         raise FileNotFoundError(f"split-specific preselection directory not found: {preselection_root}. Run modules/preselection.py first.")
 
@@ -3082,9 +3068,9 @@ if __name__ == "__main__":
     else:
         print("MIDAM-lite: disabled", flush=True)
 
-    train_seed_anchor = int(args.seed) * 1000003 + 11
-    val_seed_anchor = int(args.seed) * 1000003 + 23
-    test_seed_anchor = int(args.seed) * 1000003 + 37
+    train_seed_anchor = int(seed) * 1000003 + 11
+    val_seed_anchor = int(seed) * 1000003 + 23
+    test_seed_anchor = int(seed) * 1000003 + 37
 
     node_feature_beta_value = float(config.node_feature_beta)
     cell_encoder.set_node_feature_beta(float(node_feature_beta_value))
@@ -3698,3 +3684,47 @@ if __name__ == "__main__":
         "mil_top_cells_{val,test}.csv, best_model.pt",
         flush=True,
     )
+
+    return artifacts
+
+
+def build_train_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Train scGOAT + MIL patient classifier")
+    parser.add_argument("--dataset", required=True, help="dataset name, e.g. asthma")
+    parser.add_argument("--seed", required=False, type=int, default=42, help="random seed for reproducibility")
+    parser.add_argument("--gpu", required=True, type=int, help="cuda device index")
+    parser.add_argument("--split-number", required=True, type=int, help="split index")
+    return parser
+
+
+def build_train_config_from_cli_args(args):
+    args_dict = args.__dict__
+
+    if args.dataset == "asthma":
+        args_dict.update(asthma_train_configuration)
+    elif args.dataset == "asthma_ext":
+        args_dict.update(asthma_ext_train_configuration)
+    elif args.dataset == "vitiligo":
+        args_dict.update(vitiligo_train_configuration)
+    elif args.dataset == "covid":
+        args_dict.update(covid_train_configuration)
+    else:
+        raise ValueError(
+            f"Unsupported dataset: {args.dataset}, custom split configuration is required for new datasets."
+        )
+    return dict2namespace(args_dict)
+
+
+def load_train_config_from_cli(argv: Optional[Sequence[str]] = None):
+    parser = build_train_arg_parser()
+    args = parser.parse_args(argv)
+    return build_train_config_from_cli_args(args)
+
+
+def main() -> None:
+    config = load_train_config_from_cli()
+    run_training_phase(config)
+
+
+if __name__ == "__main__":
+    main()
