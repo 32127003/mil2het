@@ -200,19 +200,21 @@ def test_biomarker_feature_builders_and_metrics() -> None:
     impl_module.load_protein_embedding_dict = fake_load_protein_embedding_dict
     try:
         embedding_config = SimpleNamespace(
-            protein_embedding_paths=None,
+            gene_embedding_views={
+                "view_alpha": "/tmp/view_alpha.pt",
+                "view_beta": "/tmp/view_beta.pt",
+            },
             protein_embedding_choice="concat",
-            protein_embedding_sources=["GPT", "ESM3"],
             gnn_hidden_dim=4,
         )
 
         by_view = biomarker.load_prior_embeddings_by_view(
             genes=["G1", "G2"],
-            view_names=["GPT", "ESM3"],
+            view_names=["view_alpha", "view_beta"],
             config=embedding_config,
         )
-        assert set(by_view.keys()) == {"GPT", "ESM3"}
-        assert by_view["GPT"].shape == (2, 2)
+        assert set(by_view.keys()) == {"view_alpha", "view_beta"}
+        assert by_view["view_alpha"].shape == (2, 2)
 
         fixed, description, merged = biomarker.build_protein_embedding_matrix(
             genes=["G1", "G2"],
@@ -221,6 +223,17 @@ def test_biomarker_feature_builders_and_metrics() -> None:
         assert fixed.shape == (2, 4)
         assert "concat" in description
         assert merged is not None and merged.shape == (2, 4)
+
+        try:
+            biomarker.load_prior_embeddings_by_view(
+                genes=["G1", "G4"],
+                view_names=["view_alpha"],
+                config=embedding_config,
+            )
+        except ValueError as error:
+            assert "missing 1 required genes" in str(error)
+        else:
+            raise AssertionError("expected missing-gene failure for strict embedding loading")
     finally:
         impl_module.load_protein_embedding_dict = original_loader
 

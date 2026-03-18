@@ -851,7 +851,13 @@ def check_embedding_coverage(
 
     return selected[:target_k]
 
-def load_k_np_genes(dataset: str, k: int, preselection_root: Optional[str] = None) -> Tuple[List[str], List[str]]:
+def load_k_np_genes(
+    dataset: str,
+    k: int,
+    preselection_root: Optional[str] = None,
+    required_embedding_sources: Optional[Sequence[str]] = None,
+    embedding_paths: Optional[Dict[str, str]] = None,
+) -> Tuple[List[str], List[str]]:
     base_root = str(preselection_root) if preselection_root is not None else os.path.join(PROJECT_ROOT, "data", str(dataset))
     np_path = os.path.join(base_root, "NP", "NP_max.tsv")
     if not os.path.isfile(np_path):
@@ -871,14 +877,22 @@ def load_k_np_genes(dataset: str, k: int, preselection_root: Optional[str] = Non
         )
         return genes, genes
 
+    required_sources = [str(name).strip() for name in list(required_embedding_sources or []) if str(name).strip()]
+    if len(required_sources) == 0:
+        return genes[:target_k], genes
+
     selected = check_embedding_coverage(
         ranked_genes=genes,
         target_k=target_k,
-        required_sources=["ESM3", "GPT", "node2vec"],
-        embedding_paths=None,
-        force_fill_unmatched=False,  # 보통은 False 권장 (coverage 만족하는 것만 고르기)
-
+        required_sources=required_sources,
+        embedding_paths=embedding_paths,
+        force_fill_unmatched=False,
     )
+    if len(selected) == 0:
+        raise ValueError(
+            "No genes remained after embedding-coverage filtering. "
+            f"required_sources={required_sources}"
+        )
 
     return selected, genes
 
@@ -897,12 +911,34 @@ def _embedding_source_path_for_logging(
 
 
 def _normalized_configured_embedding_paths(config: SimpleNamespace) -> Optional[Dict[str, str]]:
-    configured_paths_raw = config.protein_embedding_paths
-    if isinstance(configured_paths_raw, argparse.Namespace):
-        configured_paths_raw = vars(configured_paths_raw)
-    if not isinstance(configured_paths_raw, dict) or len(configured_paths_raw) <= 0:
-        return None
-    return {str(key): str(value) for key, value in configured_paths_raw.items()}
+    for attribute_name in ("protein_embedding_paths", "gene_embedding_views", "embedding_views"):
+        configured_paths_raw = getattr(config, attribute_name, None)
+        if isinstance(configured_paths_raw, argparse.Namespace):
+            configured_paths_raw = vars(configured_paths_raw)
+        if not isinstance(configured_paths_raw, dict) or len(configured_paths_raw) <= 0:
+            continue
+        return {str(key): str(value) for key, value in configured_paths_raw.items()}
+    return None
+
+
+def _resolve_embedding_view_sources(config: SimpleNamespace) -> List[str]:
+    configured_paths = _normalized_configured_embedding_paths(config)
+    candidate_sources: List[str] = []
+    if isinstance(configured_paths, dict):
+        candidate_sources.extend(str(name) for name in configured_paths.keys())
+
+    for attribute_name in ("prior_view_sources", "protein_embedding_sources"):
+        raw_values = getattr(config, attribute_name, [])
+        if isinstance(raw_values, str):
+            raw_values = [raw_values]
+        for raw_value in list(raw_values or []):
+            text = str(raw_value).strip()
+            if text != "":
+                candidate_sources.append(text)
+
+    return _deduplicate_preserve_order(
+        [_canonical_embedding_source_name(source_name) for source_name in candidate_sources]
+    )
 
 
 def _canonical_embedding_source_name(source_name: str) -> str:
@@ -1150,33 +1186,17 @@ def _build_embedding_matrix_with_missing_fallback(
     *,
     source_name: str,
 ) -> Tuple[torch.Tensor, List[str]]:
-    """Build embedding matrix while tolerating missing genes by zero-filling."""
     missing = [str(gene) for gene in genes if str(gene) not in embedding_dict]
-    if len(missing) == 0:
-        return build_embedding_matrix(genes, embedding_dict), []
-
     if len(embedding_dict) == 0:
         raise ValueError(
             f"Protein embedding source '{source_name}' is empty; cannot infer embedding dimension."
         )
-    sample_vector = next(iter(embedding_dict.values()))
-    embedding_dimension = int(np.asarray(sample_vector, dtype=np.float32).reshape(-1).shape[0])
-    if embedding_dimension <= 0:
+    if len(missing) > 0:
         raise ValueError(
-            f"Protein embedding source '{source_name}' has invalid vector dimension: {embedding_dimension}"
+            f"Protein embedding source '{source_name}' is missing {len(missing)} required genes "
+            f"(e.g. {missing[:5]}). Align the embedding gene identifiers with the selected gene set."
         )
-
-    patched_embedding_dict = dict(embedding_dict)
-    zero_vector = np.zeros((embedding_dimension,), dtype=np.float32)
-    for gene_name in missing:
-        patched_embedding_dict[gene_name] = zero_vector
-
-    print(
-        f"[ProteinEmbedding][warn] source={source_name} missing={len(missing)} "
-        f"(e.g., {missing[:5]}); filled with zeros.",
-        flush=True,
-    )
-    return build_embedding_matrix(genes, patched_embedding_dict), missing
+    return build_embedding_matrix(genes, embedding_dict), []
 
 
 def build_protein_embedding_matrix(
@@ -1199,10 +1219,11 @@ def build_protein_embedding_matrix(
 
     configured_paths = _normalized_configured_embedding_paths(config)
 
-    sources = [str(name).strip() for name in list(config.prior_view_sources) if str(name).strip()]
+    sources = _resolve_embedding_view_sources(config)
     if len(sources) == 0:
         raise ValueError(
-            "prior_view_sources must be non-empty, e.g. ['GPT', 'node2vec', 'ESM3']."
+            "At least one embedding view is required. "
+            "Set gene_embedding_views/protein_embedding_paths or prior_view_sources."
         )
     source_norm_mode = "l2"
     output_norm_mode = "layernorm"
@@ -1539,7 +1560,7 @@ def protein_embedding_source_paths_for_logging(
         return []
 
     configured_paths = _normalized_configured_embedding_paths(config)
-    sources = list(config.prior_view_sources)
+    sources = _resolve_embedding_view_sources(config)
     resolved_paths: List[str] = []
     for source_name in sources:
         path = _embedding_source_path_for_logging(str(source_name), configured_paths)
@@ -2699,10 +2720,20 @@ if __name__ == "__main__":
     print("[Preselection] " f"split={int(config.split_number)} "f"NP={np_source_path} "f"DEG_dir={deg_source_dir} "
     f"DEG_zscore={deg_zscore_source_path} "f"zscore_standardize={zscore_standardize} "f"zscore_clip=[{zscore_clip_min},{zscore_clip_max}]", flush=True,)
 
-    genes, maximum_genes = load_k_np_genes(config.dataset, config.k, preselection_root=preselection_root)
+    required_embedding_sources = _resolve_embedding_view_sources(config)
+    if len(required_embedding_sources) == 0:
+        raise ValueError(
+            "At least one embedding view is required for FIND prior interface. "
+            "Set gene_embedding_views/protein_embedding_paths or prior_view_sources."
+        )
+    genes, maximum_genes = load_k_np_genes(
+        config.dataset,
+        config.k,
+        preselection_root=preselection_root,
+        required_embedding_sources=required_embedding_sources,
+        embedding_paths=_normalized_configured_embedding_paths(config),
+    )
     print(f"Loaded preselected {len(genes)} genes from gene space (maximum {len(maximum_genes)})", flush=True)
-    required_embedding_sources: List[str] = [str(name) for name in list(config.prior_view_sources)]
-    
     print(f"Loaded {len(genes)} genes after embedding coverage check", flush=True)
     gene_indices = map_genes_to_adata(adata, genes)
     expression_matrix = adata[:, gene_indices].X
@@ -2724,9 +2755,7 @@ if __name__ == "__main__":
         flush=True,
     )
 
-    prior_view_sources = [str(name).strip() for name in list(config.prior_view_sources) if str(name).strip()]
-    if len(prior_view_sources) == 0:
-        raise ValueError("prior_view_sources must be non-empty for FIND prior interface.")
+    prior_view_sources = list(required_embedding_sources)
     prior_embeddings_by_view = load_prior_embeddings_by_view(
         genes=genes,
         view_names=prior_view_sources,

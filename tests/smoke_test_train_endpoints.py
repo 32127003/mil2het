@@ -146,8 +146,10 @@ def test_train_model_spec_embeddings_and_optimizer() -> None:
         try:
             embedding_config = SimpleNamespace(
                 protein_embedding_choice="concat",
-                prior_view_sources=["GPT", "ESM3"],
-                protein_embedding_paths=None,
+                gene_embedding_views={
+                    "custom_llm": str(temp_path / "custom_llm.pt"),
+                    "ppi_prior": str(temp_path / "ppi_prior.pt"),
+                },
                 protein_embedding_merged_cache_path=str(temp_path / "merged_cache.pkl"),
                 dataset="toy",
                 split_preselection_subdir="split_preselection",
@@ -167,11 +169,22 @@ def test_train_model_spec_embeddings_and_optimizer() -> None:
 
             by_view = train.load_prior_embeddings_by_view(
                 genes=["G1", "G2"],
-                view_names=["GPT", "ESM3"],
+                view_names=["custom_llm", "ppi_prior"],
                 config=embedding_config,
             )
-            assert set(by_view.keys()) == {"GPT", "ESM3"}
-            assert by_view["GPT"].shape == (2, 2)
+            assert set(by_view.keys()) == {"custom_llm", "ppi_prior"}
+            assert by_view["custom_llm"].shape == (2, 2)
+
+            try:
+                train.load_prior_embeddings_by_view(
+                    genes=["G1", "G4"],
+                    view_names=["custom_llm"],
+                    config=embedding_config,
+                )
+            except ValueError as error:
+                assert "missing 1 required genes" in str(error)
+            else:
+                raise AssertionError("expected missing-gene failure for strict embedding loading")
         finally:
             impl_module.load_protein_embedding_dict = original_loader
 

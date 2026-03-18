@@ -525,9 +525,7 @@ def load_prior_embeddings_by_view(
     view_names: Sequence[str],
     config: SimpleNamespace,
 ) -> Dict[str, torch.Tensor]:
-    configured_paths = getattr(config, "protein_embedding_paths", None)
-    if not isinstance(configured_paths, dict):
-        configured_paths = None
+    configured_paths = _normalized_configured_embedding_paths(config)
 
     loaded: Dict[str, torch.Tensor] = {}
     for view_name in [str(name).strip() for name in list(view_names) if str(name).strip()]:
@@ -549,32 +547,16 @@ def _build_embedding_matrix_with_missing_fallback(
     source_name: str,
 ) -> Tuple[torch.Tensor, List[str]]:
     missing = [str(gene) for gene in genes if str(gene) not in embedding_dict]
-    if len(missing) == 0:
-        return build_embedding_matrix(genes, embedding_dict), []
-
     if len(embedding_dict) == 0:
         raise ValueError(
             f"Protein embedding source '{source_name}' is empty; cannot infer embedding dimension."
         )
-
-    sample_vector = next(iter(embedding_dict.values()))
-    embedding_dimension = int(np.asarray(sample_vector, dtype=np.float32).reshape(-1).shape[0])
-    if embedding_dimension <= 0:
+    if len(missing) > 0:
         raise ValueError(
-            f"Protein embedding source '{source_name}' has invalid vector dimension: {embedding_dimension}"
+            f"Protein embedding source '{source_name}' is missing {len(missing)} required genes "
+            f"(e.g. {missing[:5]}). Align the embedding gene identifiers with the selected gene set."
         )
-
-    patched_embedding_dict = dict(embedding_dict)
-    zero_vector = np.zeros((embedding_dimension,), dtype=np.float32)
-    for gene_name in missing:
-        patched_embedding_dict[gene_name] = zero_vector
-
-    print(
-        f"[ProteinEmbedding][warn] source={source_name} missing={len(missing)} "
-        f"(e.g., {missing[:5]}); filled with zeros.",
-        flush=True,
-    )
-    return build_embedding_matrix(genes, patched_embedding_dict), missing
+    return build_embedding_matrix(genes, embedding_dict), []
 
 
 def normalize_embedding_dict(embedding_object) -> Dict[str, np.ndarray]:
@@ -644,7 +626,38 @@ def _canonical_embedding_source_name(source_name: str) -> str:
         return "GPT"
     if normalized in {"node2vec", "n2v"}:
         return "node2vec"
-    raise ValueError(f"Unknown embedding source name: {source_name!r}")
+    return str(source_name).strip()
+
+
+def _normalized_configured_embedding_paths(config: SimpleNamespace) -> Optional[Dict[str, str]]:
+    for attribute_name in ("protein_embedding_paths", "gene_embedding_views", "embedding_views"):
+        configured_paths_raw = getattr(config, attribute_name, None)
+        if isinstance(configured_paths_raw, argparse.Namespace):
+            configured_paths_raw = vars(configured_paths_raw)
+        if not isinstance(configured_paths_raw, dict) or len(configured_paths_raw) <= 0:
+            continue
+        return {str(key): str(value) for key, value in configured_paths_raw.items()}
+    return None
+
+
+def _resolve_embedding_view_sources(config: SimpleNamespace) -> List[str]:
+    configured_paths = _normalized_configured_embedding_paths(config)
+    candidate_sources: List[str] = []
+    if isinstance(configured_paths, dict):
+        candidate_sources.extend(str(name) for name in configured_paths.keys())
+
+    for attribute_name in ("prior_view_sources", "protein_embedding_sources"):
+        raw_values = getattr(config, attribute_name, [])
+        if isinstance(raw_values, str):
+            raw_values = [raw_values]
+        for raw_value in list(raw_values or []):
+            text = str(raw_value).strip()
+            if text != "":
+                candidate_sources.append(text)
+
+    return _deduplicate_preserve_order(
+        [_canonical_embedding_source_name(source_name) for source_name in candidate_sources]
+    )
 
 
 def _select_genes_with_embedding_coverage(
@@ -818,14 +831,12 @@ def build_protein_embedding_matrix(
             f"Got: {str(getattr(config, 'protein_embedding_choice', choice))!r}"
         )
 
-    configured_paths = getattr(config, "protein_embedding_paths", None)
-    if not isinstance(configured_paths, dict):
-        configured_paths = None
-
-    sources = [str(name).strip() for name in list(getattr(config, "protein_embedding_sources", [])) if str(name).strip()]
+    configured_paths = _normalized_configured_embedding_paths(config)
+    sources = _resolve_embedding_view_sources(config)
     if len(sources) == 0:
         raise ValueError(
-            "protein_embedding_sources must be non-empty, e.g. ['GPT', 'node2vec', 'ESM3']."
+            "At least one embedding view is required. "
+            "Set gene_embedding_views/protein_embedding_paths or prior_view_sources."
         )
     source_matrices: List[torch.Tensor] = []
     for source_name in sources:
@@ -1427,23 +1438,14 @@ def main() -> None:
     patient_mapping, patient_array = create_category_mapping(patient_values)
     patient_index_to_id = {int(index): str(name) for name, index in patient_mapping.items()}
 
-    prior_view_sources = [
-        str(name).strip()
-        for name in list(getattr(config, "prior_view_sources", []))
-        if str(name).strip()
-    ]
+    prior_view_sources = _resolve_embedding_view_sources(config)
     if len(prior_view_sources) == 0:
-        prior_view_sources = [
-            str(name).strip()
-            for name in list(getattr(config, "protein_embedding_sources", []))
-            if str(name).strip()
-        ]
-    if len(prior_view_sources) == 0:
-        raise ValueError("prior_view_sources must be non-empty for model reconstruction.")
+        raise ValueError(
+            "At least one embedding view is required for model reconstruction. "
+            "Set gene_embedding_views/protein_embedding_paths or prior_view_sources."
+        )
 
-    configured_embedding_paths = getattr(config, "protein_embedding_paths", None)
-    if not isinstance(configured_embedding_paths, dict):
-        configured_embedding_paths = None
+    configured_embedding_paths = _normalized_configured_embedding_paths(config)
 
     preselection_root = resolve_preselection_root(config)
     print(
