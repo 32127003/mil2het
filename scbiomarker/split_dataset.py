@@ -38,5 +38,12 @@ __all__ = [
     "patient_folds_to_sample_folds",
     "sample_folds_to_cell_folds",
     "patient_overlap_counts",
+    "normalize_binary_label_values",
+    "infer_dataset_name",
+    "resolve_adata_path",
+    "resolve_split_output_directory",
+    "build_legacy_split_config",
     "build_and_save_folds",
+    "run_split_generation",
+    "build_split_config_from_cli_args",
 ]

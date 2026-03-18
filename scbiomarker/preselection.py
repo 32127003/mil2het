@@ -41,5 +41,12 @@ __all__ = [
     "compute_global_deg_zscore",
     "run_rwr",
     "np_scores",
+    "infer_dataset_name",
+    "resolve_adata_path",
+    "resolve_preselection_output_root",
+    "discover_split_indices",
     "preselection",
+    "run_split_preselection",
+    "build_legacy_preselection_config",
+    "build_preselection_config_from_cli_args",
 ]

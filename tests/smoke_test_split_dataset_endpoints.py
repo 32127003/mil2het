@@ -22,7 +22,14 @@ SPLIT_DATASET_ENDPOINTS = [
     "patient_folds_to_sample_folds",
     "sample_folds_to_cell_folds",
     "patient_overlap_counts",
+    "normalize_binary_label_values",
+    "infer_dataset_name",
+    "resolve_adata_path",
+    "resolve_split_output_directory",
+    "build_legacy_split_config",
     "build_and_save_folds",
+    "run_split_generation",
+    "build_split_config_from_cli_args",
 ]
 
 
@@ -112,8 +119,7 @@ def test_split_dataset_build_and_save_folds() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         adata_root = temp_path / "adata"
-        dataset_dir = adata_root / "toy"
-        dataset_dir.mkdir(parents=True)
+        adata_root.mkdir(parents=True)
 
         num_cells = 18
         num_features = 4
@@ -124,28 +130,30 @@ def test_split_dataset_build_and_save_folds() -> None:
         labels = [str((i // 3) % 2) for i in range(num_cells)]
         adata.obs["patient_id"] = patient_ids
         adata.obs["label"] = labels
+        adata.obs["sample_id"] = [f"s{i // 3}" for i in range(num_cells)]
 
-        adata_path = dataset_dir / "toy_data.h5ad"
+        adata_path = adata_root / "toy_data.h5ad"
         adata.write_h5ad(adata_path)
 
         out_dir = temp_path / "splits"
         config = SimpleNamespace(
-            adata_directory=str(adata_root),
-            dataset="toy",
+            adata_path=str(adata_path),
+            dataset="",
             patient_column="patient_id",
             label_column="label",
-            splits_directory=str(out_dir),
+            output_dir=str(out_dir),
             sample_column="sample_id",
-        )
-
-        split_dataset.build_and_save_folds(
-            config=config,
-            random_seed=0,
+            seed=0,
             num_folds=3,
-            out_dir=str(out_dir),
+            num_valid_patients=0,
             binary_positive_labels=["1"],
             binary_negative_labels=["0"],
         )
+
+        assert split_dataset.infer_dataset_name(config) == "toy"
+        assert split_dataset.resolve_adata_path(config) == str(adata_path)
+        assert split_dataset.resolve_split_output_directory(config) == str(out_dir)
+        split_dataset.run_split_generation(config)
 
         expected_files = [
             out_dir / "toy_idx_0.pkl",

@@ -6,6 +6,7 @@ python scripts/preselection.py --dataset asthma
 import argparse
 import sys
 import os
+import re
 from pathlib import Path
 
 import pickle
@@ -224,6 +225,79 @@ def load_split_train_indices(splits_dir: str, dataset: str, split_idx: int) -> n
     if train_indices.size == 0:
         raise ValueError(f"Train split is empty: {split_path}")
     return train_indices
+
+
+def infer_dataset_name(config) -> str:
+    dataset_value = str(getattr(config, "dataset", "") or "").strip()
+    if dataset_value != "":
+        return dataset_value
+
+    adata_path = str(
+        getattr(config, "adata_path", "") or getattr(config, "input_h5ad", "") or ""
+    ).strip()
+    if adata_path == "":
+        raise ValueError("Either config.dataset or config.adata_path/input_h5ad must be set.")
+
+    stem = Path(adata_path).stem
+    if stem.endswith("_data"):
+        stem = stem[: -len("_data")]
+    if stem == "":
+        raise ValueError(f"Could not infer dataset name from adata path: {adata_path}")
+    return stem
+
+
+def resolve_adata_path(config) -> str:
+    adata_path = str(
+        getattr(config, "adata_path", "") or getattr(config, "input_h5ad", "") or ""
+    ).strip()
+    if adata_path != "":
+        return adata_path
+
+    dataset_name = infer_dataset_name(config)
+    adata_directory = str(getattr(config, "adata_directory", "") or "").strip()
+    if adata_directory == "":
+        raise ValueError("Either config.adata_path/input_h5ad or config.adata_directory must be set.")
+    return os.path.join(adata_directory, dataset_name, f"{dataset_name}_data.h5ad")
+
+
+def resolve_preselection_output_root(config, dataset_name: str) -> str:
+    output_root = str(
+        getattr(config, "out_dir", "")
+        or getattr(config, "output_dir", "")
+        or getattr(config, "preselection_root", "")
+        or ""
+    ).strip()
+    if output_root != "":
+        return output_root
+
+    if str(getattr(config, "dataset", "") or "").strip() != "":
+        return os.path.join(PROJECT_ROOT, "data", dataset_name, "preselection")
+
+    splits_directory = str(getattr(config, "splits_directory", "") or "").strip()
+    if splits_directory != "":
+        return os.path.join(str(Path(splits_directory).resolve().parent), "preselection")
+
+    raise ValueError(
+        "Either config.out_dir/output_dir/preselection_root or config.splits_directory must be set."
+    )
+
+
+def discover_split_indices(splits_dir: str, dataset_name: str, num_folds: Optional[int] = None) -> List[int]:
+    pattern = re.compile(rf"^{re.escape(str(dataset_name))}_idx_(\d+)\.pkl$")
+    discovered: List[int] = []
+    for file_name in os.listdir(splits_dir):
+        match = pattern.match(str(file_name))
+        if match is None:
+            continue
+        discovered.append(int(match.group(1)))
+
+    if len(discovered) > 0:
+        return sorted(set(discovered))
+    if num_folds is not None:
+        return [int(index) for index in range(int(num_folds))]
+    raise FileNotFoundError(
+        f"No split files found under {splits_dir} matching {dataset_name}_idx_<n>.pkl."
+    )
 
 
 ############################################################ (for DEG analysis) ##################################################################
@@ -766,6 +840,12 @@ def preselection(
     celltype_column: str,
     out_dir: str,
     split_idx: Optional[int] = None,
+    deg_max_p_value: Optional[float] = None,
+    deg_min_abs_logfc: Optional[float] = None,
+    restart_prob: Optional[float] = None,
+    convergence_threshold_l1: Optional[float] = None,
+    max_iterations: Optional[int] = None,
+    directed: Optional[bool] = None,
 ) -> None:
     
     if not ppi_network_path:
@@ -803,8 +883,12 @@ def preselection(
         label_column=str(groupby),
         label_groups=groups,
         ppi_node_set=ppi_node_set,
-        max_p_value=float(config.deg_max_p_value),
-        min_abs_logfc=float(config.deg_min_abs_logfc),
+        max_p_value=float(
+            deg_max_p_value if deg_max_p_value is not None else float(config.deg_max_p_value)
+        ),
+        min_abs_logfc=float(
+            deg_min_abs_logfc if deg_min_abs_logfc is not None else float(config.deg_min_abs_logfc)
+        ),
         allow_empty_pass_set="allow_empty",
     )
     for celltype_name, payload in per_celltype_deg.items():
@@ -954,16 +1038,22 @@ def preselection(
         return
 
     rwr_config = RWRConfig(
-        restart_probability=float(config.restart_prob),
-        convergence_threshold_l1=float(config.convergence_threshold_l1),
-        max_iterations=int(config.max_iterations),
-        treat_as_undirected=(not bool(config.directed)),
+        restart_probability=float(
+            restart_prob if restart_prob is not None else float(config.restart_prob)
+        ),
+        convergence_threshold_l1=float(
+            convergence_threshold_l1
+            if convergence_threshold_l1 is not None
+            else float(config.convergence_threshold_l1)
+        ),
+        max_iterations=int(max_iterations if max_iterations is not None else int(config.max_iterations)),
+        treat_as_undirected=(not bool(directed if directed is not None else bool(config.directed))),
     )
 
     try:
         np_genes_sorted, np_score_values_sorted = np_scores(
             adata=adata,
-            network_path=str(config.ppi_path),
+            network_path=str(ppi_network_path),
             seed_genes=seed_genes_for_np,
             rwr_config=rwr_config,
         )
@@ -995,58 +1085,29 @@ def preselection(
     print(f"{prefix}[NP] wrote: {np_max_path} (n={len(full_records)})")
 
 
-
-
-
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Split-aware preselection for DEG/NP (split-train-only).")
-    parser.add_argument("--dataset", type=str, required=True, help="Dataset name",)
-    args = parser.parse_args()
-    args_dict = args.__dict__
-
-    if args.dataset == 'asthma':
-        args_dict.update(asthma_split_configuration)
-    elif args.dataset == 'asthma_ext':
-        args_dict.update(asthma_ext_split_configuration)
-    elif args.dataset == 'vitiligo':
-        args_dict.update(vitiligo_split_configuration)
-    elif args.dataset == 'covid':
-        args_dict.update(covid_split_configuration)
-    else:
-        raise ValueError(
-            f"Unsupported dataset: {args.dataset}, custom split configuration is required for new datasets."
-        )
-
-    config = dict2namespace(args_dict)
-    
-
-    
-    if not config.splits_directory:
+def run_split_preselection(config) -> str:
+    if not getattr(config, "splits_directory", None):
         raise ValueError("splits_directory must be specified in the configuration.")
-    if not config.ppi_path:
+    if not getattr(config, "ppi_path", None):
         raise ValueError("ppi_path must be specified in the configuration.")
-    print(f"Configuration: {config}")
 
-    # Run the whole preselection per patient_state.
+    dataset_name = infer_dataset_name(config)
+    adata_path = resolve_adata_path(config)
+    print(f"reading adata from {adata_path}...")
+    adata = sc.read_h5ad(adata_path)
 
-
-    print(f"reading adata from {config.adata_directory}/{config.dataset}...")
-    adata = sc.read_h5ad(os.path.join(config.adata_directory, config.dataset, f"{config.dataset}_data.h5ad"))
-
-    patient_values = adata.obs[config.patient_column].astype(str).to_numpy()
-    unique_patients = sorted(set(patient_values))
-
-    out_dir = os.path.join(PROJECT_ROOT, "data", config.dataset, "preselection")
-
-    split_indices = [int(idx) for idx in range(config.num_folds)]
+    out_dir = resolve_preselection_output_root(config, dataset_name=dataset_name)
     os.makedirs(out_dir, exist_ok=True)
+    split_indices = discover_split_indices(
+        splits_dir=str(config.splits_directory),
+        dataset_name=dataset_name,
+        num_folds=getattr(config, "num_folds", None),
+    )
 
     for split_idx in split_indices:
         train_indices = load_split_train_indices(
-            splits_dir=config.splits_directory,
-            dataset=config.dataset,
+            splits_dir=str(config.splits_directory),
+            dataset=dataset_name,
             split_idx=split_idx,
         )
         adata_train = adata[train_indices].copy()
@@ -1058,16 +1119,114 @@ if __name__ == "__main__":
         )
         preselection(
             adata=adata_train,
-            ppi_network_path=config.ppi_path,
-            groupby=config.label_column,
-            group1=config.binary_positive_label,
-            group2=config.binary_negative_label,
-            celltype_column=config.celltype_column,
+            ppi_network_path=str(config.ppi_path),
+            groupby=str(config.label_column),
+            group1=str(getattr(config, "binary_positive_label", "1")),
+            group2=str(getattr(config, "binary_negative_label", "0")),
+            celltype_column=str(config.celltype_column),
             out_dir=split_out_dir,
             split_idx=split_idx,
+            deg_max_p_value=float(getattr(config, "deg_max_p_value", 0.05)),
+            deg_min_abs_logfc=float(getattr(config, "deg_min_abs_logfc", 1.0)),
+            restart_prob=float(getattr(config, "restart_prob", 0.1)),
+            convergence_threshold_l1=float(getattr(config, "convergence_threshold_l1", 1e-6)),
+            max_iterations=int(getattr(config, "max_iterations", 1000)),
+            directed=bool(getattr(config, "directed", False)),
         )
 
-    print(
-        f"Split output directory: {out_dir}",
-        flush=True,
-    )
+    print(f"Split output directory: {out_dir}", flush=True)
+    return out_dir
+
+
+def build_legacy_preselection_config(dataset_name: str):
+    dataset_key = str(dataset_name).strip()
+    if dataset_key == "asthma":
+        config_dict = dict(asthma_split_configuration)
+    elif dataset_key == "asthma_ext":
+        config_dict = dict(asthma_ext_split_configuration)
+    elif dataset_key == "vitiligo":
+        config_dict = dict(vitiligo_split_configuration)
+    elif dataset_key == "covid":
+        config_dict = dict(covid_split_configuration)
+    else:
+        raise ValueError(
+            f"Unsupported dataset: {dataset_key}, custom split configuration is required for new datasets."
+        )
+
+    config_dict["dataset"] = dataset_key
+    return dict2namespace(config_dict)
+
+
+def build_preselection_config_from_cli_args(args):
+    if args.dataset is not None and args.adata_path is None and args.label_column is None and args.celltype_column is None:
+        return build_legacy_preselection_config(args.dataset)
+
+    if args.adata_path is None:
+        raise ValueError("--adata-path is required when not using a legacy --dataset preset.")
+    if args.label_column is None:
+        raise ValueError("--label-column is required when not using a legacy --dataset preset.")
+    if args.celltype_column is None:
+        raise ValueError("--celltype-column is required when not using a legacy --dataset preset.")
+    if args.splits_directory is None:
+        raise ValueError("--splits-directory is required when not using a legacy --dataset preset.")
+    if args.ppi_path is None:
+        raise ValueError("--ppi-path is required when not using a legacy --dataset preset.")
+    if args.output_dir is None:
+        raise ValueError("--output-dir is required when not using a legacy --dataset preset.")
+
+    dataset_name = str(args.dataset_name or args.dataset or "").strip()
+    if dataset_name == "":
+        stem = Path(str(args.adata_path)).stem
+        dataset_name = stem[: -len("_data")] if stem.endswith("_data") else stem
+
+    config_dict = {
+        "adata_path": str(args.adata_path),
+        "dataset": str(dataset_name),
+        "celltype_column": str(args.celltype_column),
+        "label_column": str(args.label_column),
+        "ppi_path": str(args.ppi_path),
+        "splits_directory": str(args.splits_directory),
+        "out_dir": str(args.output_dir),
+        "num_folds": int(args.num_folds) if args.num_folds is not None else 5,
+        "binary_positive_label": str(args.positive_label or "1"),
+        "binary_negative_label": str(args.negative_label or "0"),
+        "deg_max_p_value": float(args.deg_max_p_value if args.deg_max_p_value is not None else 0.05),
+        "deg_min_abs_logfc": float(args.deg_min_abs_logfc if args.deg_min_abs_logfc is not None else 1.0),
+        "restart_prob": float(args.restart_prob if args.restart_prob is not None else 0.1),
+        "convergence_threshold_l1": float(
+            args.convergence_threshold_l1 if args.convergence_threshold_l1 is not None else 1e-6
+        ),
+        "max_iterations": int(args.max_iterations if args.max_iterations is not None else 1000),
+        "directed": bool(args.directed),
+    }
+    return dict2namespace(config_dict)
+
+
+
+
+
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Split-aware preselection for DEG/NP (split-train-only).")
+    parser.add_argument("--dataset", type=str, required=False, help="Legacy dataset preset name.")
+    parser.add_argument("--dataset-name", type=str, default=None, help="Explicit dataset/output prefix.")
+    parser.add_argument("--adata-path", type=str, default=None, help="Explicit .h5ad path.")
+    parser.add_argument("--label-column", type=str, default=None, help="Label column in adata.obs.")
+    parser.add_argument("--celltype-column", type=str, default=None, help="Cell type column in adata.obs.")
+    parser.add_argument("--ppi-path", type=str, default=None, help="PPI network path.")
+    parser.add_argument("--splits-directory", type=str, default=None, help="Directory containing split pickle files.")
+    parser.add_argument("--output-dir", type=str, default=None, help="Output directory for preselection artifacts.")
+    parser.add_argument("--num-folds", type=int, default=None)
+    parser.add_argument("--positive-label", type=str, default=None)
+    parser.add_argument("--negative-label", type=str, default=None)
+    parser.add_argument("--deg-max-p-value", type=float, default=None)
+    parser.add_argument("--deg-min-abs-logfc", type=float, default=None)
+    parser.add_argument("--restart-prob", type=float, default=None)
+    parser.add_argument("--convergence-threshold-l1", type=float, default=None)
+    parser.add_argument("--max-iterations", type=int, default=None)
+    parser.add_argument("--directed", action="store_true")
+    args = parser.parse_args()
+    config = build_preselection_config_from_cli_args(args)
+    print(f"Configuration: {config}")
+    run_split_preselection(config)

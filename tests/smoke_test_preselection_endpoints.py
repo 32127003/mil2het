@@ -27,7 +27,14 @@ PRESELECTION_ENDPOINTS = [
     "compute_global_deg_zscore",
     "run_rwr",
     "np_scores",
+    "infer_dataset_name",
+    "resolve_adata_path",
+    "resolve_preselection_output_root",
+    "discover_split_indices",
     "preselection",
+    "run_split_preselection",
+    "build_legacy_preselection_config",
+    "build_preselection_config_from_cli_args",
 ]
 
 
@@ -188,17 +195,6 @@ def test_preselection_rwr_and_pipeline() -> None:
         rwr_scores = preselection.run_rwr(p_matrix=p_matrix, p0=p0, rwr_config=rwr_cfg)
         assert rwr_scores.shape[0] == len(node_order)
 
-        impl_module = preselection._load_impl_module()
-        impl_module.config = SimpleNamespace(
-            deg_max_p_value=1.0,
-            deg_min_abs_logfc=0.0,
-            restart_prob=0.1,
-            convergence_threshold_l1=1e-8,
-            max_iterations=200,
-            directed=False,
-            ppi_path=str(ppi_path),
-        )
-
         out_dir = temp_path / "preselection_out"
         preselection.preselection(
             adata=adata,
@@ -209,6 +205,12 @@ def test_preselection_rwr_and_pipeline() -> None:
             celltype_column="celltype",
             out_dir=str(out_dir),
             split_idx=0,
+            deg_max_p_value=1.0,
+            deg_min_abs_logfc=0.0,
+            restart_prob=0.1,
+            convergence_threshold_l1=1e-8,
+            max_iterations=200,
+            directed=False,
         )
 
         assert (out_dir / "DEG" / "DEG_merged.tsv").is_file()
@@ -216,10 +218,64 @@ def test_preselection_rwr_and_pipeline() -> None:
         assert (out_dir / "NP" / "NP_max.tsv").is_file()
 
 
+def test_run_split_preselection_with_explicit_inputs() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        ppi_path = temp_path / "ppi.tsv"
+        ppi_path.write_text("G1\tG2\nG2\tG3\nG3\tG4\n", encoding="utf-8")
+
+        adata = build_deg_adata()
+        patient_ids = [f"p{i // 4}" for i in range(adata.n_obs)]
+        adata.obs["patient_id"] = patient_ids
+        adata_path = temp_path / "toy_data.h5ad"
+        adata.write_h5ad(adata_path)
+
+        splits_dir = temp_path / "splits"
+        splits_dir.mkdir(parents=True)
+        with (splits_dir / "toy_idx_0.pkl").open("wb") as file_handle:
+            pickle.dump(
+                [
+                    list(range(10)) + list(range(20, 30)),
+                    list(range(10, 15)) + list(range(30, 35)),
+                    list(range(15, 20)) + list(range(35, 40)),
+                ],
+                file_handle,
+            )
+
+        config = SimpleNamespace(
+            adata_path=str(adata_path),
+            dataset="",
+            label_column="label",
+            celltype_column="celltype",
+            ppi_path=str(ppi_path),
+            splits_directory=str(splits_dir),
+            out_dir=str(temp_path / "preselection"),
+            num_folds=1,
+            binary_positive_label="1",
+            binary_negative_label="0",
+            deg_max_p_value=1.0,
+            deg_min_abs_logfc=0.0,
+            restart_prob=0.1,
+            convergence_threshold_l1=1e-8,
+            max_iterations=200,
+            directed=False,
+        )
+
+        assert preselection.infer_dataset_name(config) == "toy"
+        assert preselection.resolve_adata_path(config) == str(adata_path)
+        assert preselection.discover_split_indices(str(splits_dir), "toy", num_folds=1) == [0]
+
+        output_root = preselection.run_split_preselection(config)
+        assert output_root == str(temp_path / "preselection")
+        assert (Path(output_root) / "split_0" / "DEG" / "DEG_merged.tsv").is_file()
+        assert (Path(output_root) / "split_0" / "NP" / "NP_max.tsv").is_file()
+
+
 def main() -> None:
     test_preselection_endpoints_exist()
     test_preselection_io_and_deg_helpers()
     test_preselection_rwr_and_pipeline()
+    test_run_split_preselection_with_explicit_inputs()
     print_success("preselection endpoints")
 
 
