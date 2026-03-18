@@ -1,0 +1,30 @@
+workflow:
+  input_h5ad: ""
+  output_root: "./outputs/scbiomarker"
+  run_dir: ""
+  analysis_output_dir: ""
+  num_folds: 5
+  split_number: 0
+  seed: 42
+  train_only: false
+  analysis_only: false
+
+columns:
+  patient: ""
+  celltype: ""
+  label: ""
+  sample: null
+  treatment: null
+
+labels:
+  positive: ["1"]
+  negative: ["0"]
+
+resources:
+  ppi_path: ""
+  embedding_views: {}
+
+training:
+  epochs: 200
+  lr: 0.0003
+  k: 2000

@@ -71,6 +71,30 @@ def test_biomarker_config_and_path_helpers() -> None:
         assert config_ns.dataset == "toy"
         assert config_dict["gnn_hidden_dim"] == 8
 
+        yaml_config = temp_path / "toy_config.yml"
+        yaml_config.write_text(
+            "\n".join(
+                [
+                    "workflow:",
+                    "  input_h5ad: /tmp/toy_data.h5ad",
+                    "  analysis_only: true",
+                    "  run_dir: /tmp/run_dir",
+                    "columns:",
+                    "  patient: patient_id",
+                    "  celltype: celltype",
+                    "  label: label",
+                    "resources:",
+                    "  ppi_path: /tmp/ppi.tsv",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        yaml_ns, yaml_dict = biomarker.load_config(str(yaml_config), dataset_hint="toy")
+        assert yaml_ns.analysis_only is True
+        assert yaml_ns.run_dir == "/tmp/run_dir"
+        assert yaml_dict["patient_column"] == "patient_id"
+
         train_snapshot = temp_path / "train_snapshot.py"
         train_snapshot.write_text(
             "asthma_train_configuration = {'cell_encoder_name': 'graph_gat'}\n",

@@ -9,7 +9,7 @@
 
 ## TODO (top priority)
 - [x] T-002: lock workflow contract, paper parity, and the user-facing interface
-- [ ] T-003: introduce a generic YAML config layer with CLI override precedence
+- [x] T-003: introduce a generic YAML config layer with CLI override precedence
 
 ## Now
 - [x] T-001: create `pyproject.toml` for pip module

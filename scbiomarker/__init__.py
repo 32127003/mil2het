@@ -7,6 +7,7 @@ from . import (
     CellEncoder,
     MultipleInstanceLearning,
     biomarker,
+    config,
     preselection,
     prior_interface_find,
     split_dataset,
@@ -32,6 +33,7 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     "CellEncoder",
     "MultipleInstanceLearning",
+    "config",
     "prior_interface_find",
     "biomarker",
     "split_dataset",

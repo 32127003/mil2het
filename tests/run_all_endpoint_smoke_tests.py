@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 SMOKE_TEST_SCRIPTS = [
+    "smoke_test_config_endpoints.py",
     "smoke_test_cell_encoder_endpoints.py",
     "smoke_test_multiple_instance_learning_endpoints.py",
     "smoke_test_prior_interface_find_endpoints.py",

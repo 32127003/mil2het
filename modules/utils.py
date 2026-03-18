@@ -27,6 +27,8 @@ from sklearn.metrics import (
 )
 from tqdm import tqdm
 
+from scbiomarker.config import dict_to_namespace, load_workflow_config_dict
+
 MODULE_ROOT = os.path.abspath(os.path.dirname(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(MODULE_ROOT, ".."))
 DATA_ROOT = os.path.join(PROJECT_ROOT, "data")
@@ -793,6 +795,9 @@ def apply_pathway_mask(
 
 
 def load_config_from_path(config_path: str) -> SimpleNamespace:
+    if str(config_path).lower().endswith((".yaml", ".yml")):
+        return dict_to_namespace(load_workflow_config_dict(config_path=config_path))
+
     spec = importlib.util.spec_from_file_location("config_module", config_path)
     if spec is None or spec.loader is None:
         raise ValueError(f"Unable to load config from {config_path}")

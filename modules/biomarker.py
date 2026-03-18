@@ -44,6 +44,7 @@ if PROJECT_ROOT not in sys.path:
 
 from CellEncoder import GraphCellEncoder, TransformerConvCellEncoder
 from MultipleInstanceLearning import PatientMILAggregator
+from scbiomarker.config import dict_to_namespace, load_workflow_config_dict
 from utils import *
 
 
@@ -115,6 +116,12 @@ def load_config(
     config_path: str,
     dataset_hint: Optional[str] = None,
 ) -> Tuple[SimpleNamespace, Dict[str, object]]:
+    if str(config_path).lower().endswith((".yaml", ".yml")):
+        config_dict = load_workflow_config_dict(config_path=config_path)
+        if str(config_dict.get("dataset", "")).strip() == "" and dataset_hint is not None:
+            config_dict["dataset"] = str(dataset_hint)
+        return dict_to_namespace(config_dict), dict(config_dict)
+
     module_name = os.path.splitext(os.path.basename(config_path))[0]
     spec = importlib.util.spec_from_file_location(module_name, config_path)
     if spec is None or spec.loader is None:
@@ -131,6 +138,12 @@ def load_config_like_train_from_run_snapshot(
     dataset_hint: Optional[str] = None,
 ) -> Tuple[SimpleNamespace, Dict[str, object]]:
     """Load run snapshot config with the same dataset->dict pattern as train.py."""
+    if str(config_path).lower().endswith((".yaml", ".yml")):
+        config_dict = load_workflow_config_dict(config_path=config_path)
+        if str(config_dict.get("dataset", "")).strip() == "" and dataset_hint is not None:
+            config_dict["dataset"] = str(dataset_hint)
+        return dict_to_namespace(config_dict), dict(config_dict)
+
     dataset_value = str(dataset_hint).strip().lower() if dataset_hint is not None else ""
     module_name = os.path.splitext(os.path.basename(config_path))[0]
     spec = importlib.util.spec_from_file_location(module_name, config_path)
