@@ -464,13 +464,20 @@ def build_workflow_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Load scbiomarker workflow config.")
     parser.add_argument("--config", dest="config_path", default=None, help="External YAML config path.")
     parser.add_argument("--adata", dest="input_h5ad", default=None, help="Input .h5ad path.")
-    parser.add_argument("--patient-column", dest="patient_column", default=None)
-    parser.add_argument("--celltype-column", dest="celltype_column", default=None)
-    parser.add_argument("--label-column", dest="label_column", default=None)
-    parser.add_argument("--sample-column", dest="sample_column", default=None)
-    parser.add_argument("--treatment-column", dest="treatment_column", default=None)
+    parser.add_argument("--patient-column", "--patient", dest="patient_column", default=None)
+    parser.add_argument(
+        "--celltype-column",
+        "--celltype",
+        "--cell-type",
+        "--cell_type",
+        dest="celltype_column",
+        default=None,
+    )
+    parser.add_argument("--label-column", "--label", dest="label_column", default=None)
+    parser.add_argument("--sample-column", "--sample", dest="sample_column", default=None)
+    parser.add_argument("--treatment-column", "--treatment", dest="treatment_column", default=None)
     parser.add_argument("--ppi", dest="ppi_path", default=None)
-    parser.add_argument("--output-dir", dest="output_root", default=None)
+    parser.add_argument("--output-dir", "--output-root", dest="output_root", default=None)
     parser.add_argument("--run-dir", dest="run_dir", default=None)
     parser.add_argument("--analysis-output-dir", dest="analysis_output_dir", default=None)
     parser.add_argument("--num-folds", dest="num_folds", type=int, default=None)
@@ -481,12 +488,14 @@ def build_workflow_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--gene-embedding",
         "--add-gene-embedding",
+        "--add_gene_embedding",
         dest="embedding_views",
         action="append",
         default=None,
         help="Repeated override of the form <view_name>=<path>.",
     )
     parser.add_argument("--train-only", dest="train_only", action="store_true", default=None)
+    parser.add_argument("--train_only", dest="train_only", action="store_true", default=None)
     parser.add_argument(
         "--skip-analysis",
         "--skip_analysis",
@@ -495,6 +504,7 @@ def build_workflow_arg_parser() -> argparse.ArgumentParser:
         default=None,
     )
     parser.add_argument("--analysis-only", dest="analysis_only", action="store_true", default=None)
+    parser.add_argument("--analysis_only", dest="analysis_only", action="store_true", default=None)
     return parser
 
 
