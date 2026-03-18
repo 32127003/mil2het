@@ -12,17 +12,6 @@ def build_cli_arg_parser() -> argparse.ArgumentParser:
     parser.prog = "scbiomarker"
     parser.description = "Run the scbiomarker workflow from the command line."
     parser.add_argument("adata_input", nargs="?", default=None, help="Input .h5ad path.")
-    parser.add_argument("--patient", dest="patient_column", default=None, help="Patient column in adata.obs.")
-    parser.add_argument(
-        "--cell-type",
-        "--cell_type",
-        dest="celltype_column",
-        default=None,
-        help="Cell-type column in adata.obs.",
-    )
-    parser.add_argument("--label", dest="label_column", default=None, help="Label column in adata.obs.")
-    parser.add_argument("--sample", dest="sample_column", default=None, help="Optional sample column.")
-    parser.add_argument("--treatment", dest="treatment_column", default=None, help="Optional treatment column.")
     parser.add_argument(
         "--pathway-path",
         "--pathway",
