@@ -292,9 +292,10 @@ def run_pipeline(
     training_artifacts: dict[str, Any] | None = None
     analysis_artifacts: dict[str, Any] | None = None
 
-    if gpu_index is not None and device is None:
-        setattr(config_namespace, "gpu", int(gpu_index))
-        config_dict["gpu"] = int(gpu_index)
+    if not bool(config_dict["analysis_only"]) and device is None:
+        resolved_gpu_index = 0 if gpu_index is None else int(gpu_index)
+        setattr(config_namespace, "gpu", resolved_gpu_index)
+        config_dict["gpu"] = resolved_gpu_index
 
     if not bool(config_dict["analysis_only"]):
         split_dataset.run_split_generation(config_namespace)

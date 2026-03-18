@@ -51,6 +51,9 @@ def test_cli_help_and_override_wiring() -> None:
     assert "--gpu" in help_text
     assert "--analysis-only" in help_text
     assert "--add-gene-embedding" in help_text
+    assert "--patient" in help_text
+    assert "--cell-type" in help_text
+    assert "--k" in help_text
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -88,6 +91,8 @@ def test_cli_help_and_override_wiring() -> None:
                         "20",
                         "--lr",
                         "0.02",
+                        "--k",
+                        "64",
                         "--skip_analysis",
                         "--gpu",
                         "-1",
@@ -109,6 +114,7 @@ def test_cli_help_and_override_wiring() -> None:
         assert overrides["resources"]["embedding_views"]["llm"] == "/tmp/llm.pkl"
         assert overrides["training"]["epochs"] == 20
         assert overrides["training"]["lr"] == 0.02
+        assert overrides["training"]["k"] == 64
 
         stdout_text = stdout_buffer.getvalue()
         assert "phases=split,preselection,training" in stdout_text
@@ -153,10 +159,58 @@ def test_cli_analysis_only_wiring() -> None:
         assert overrides["workflow"]["analysis_output_dir"] == "/tmp/analysis_dir"
 
 
+def test_cli_defaults_training_gpu_to_zero() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        config_path = temp_path / "toy_config.yaml"
+        config_path.write_text(
+            "\n".join(
+                [
+                    "workflow:",
+                    "  output_root: /tmp/out",
+                    "columns:",
+                    "  patient: patient_id",
+                    "  celltype: celltype",
+                    "  label: label",
+                    "resources:",
+                    "  ppi_path: /tmp/ppi.tsv",
+                    "  embedding_views:",
+                    "    llm: /tmp/llm.pkl",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        captured_kwargs: dict[str, object] = {}
+        original_run_pipeline = cli.run_pipeline
+
+        def fake_run_pipeline(*args, **kwargs):
+            captured_kwargs["args"] = args
+            captured_kwargs["kwargs"] = kwargs
+            return build_fake_result(temp_path)
+
+        cli.run_pipeline = fake_run_pipeline
+        try:
+            cli.main(
+                [
+                    "toy_data.h5ad",
+                    "--config",
+                    str(config_path),
+                ]
+            )
+        finally:
+            cli.run_pipeline = original_run_pipeline
+
+        kwargs = captured_kwargs["kwargs"]
+        assert kwargs["gpu_index"] == 0
+
+
 def main() -> None:
     test_cli_endpoints_exist()
     test_cli_help_and_override_wiring()
     test_cli_analysis_only_wiring()
+    test_cli_defaults_training_gpu_to_zero()
     print_success("cli endpoints")
 
 

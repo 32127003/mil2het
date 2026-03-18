@@ -9,10 +9,10 @@
 Add a real package-installed CLI that mirrors the end-to-end Python API and the override semantics in `TODO.md`. The CLI should expose the full workflow, phase-only execution, and config layering without requiring users to call internal scripts directly.
 
 ## Dependencies
-- [ ] Depends on T-007.
-- [ ] Also relies on T-002 for command naming and T-003 for config override behavior.
-- [ ] Should start only after the Python API surface is stable enough for the CLI to wrap directly.
-- [ ] Unblocks T-009.
+- [x] Depends on T-007.
+- [x] Also relies on T-002 for command naming and T-003 for config override behavior.
+- [x] Should start only after the Python API surface is stable enough for the CLI to wrap directly.
+- [x] Unblocks T-009.
 
 ## Scope
 - [x] Add a console entrypoint in `pyproject.toml`.
@@ -43,4 +43,6 @@ Add a real package-installed CLI that mirrors the end-to-end Python API and the 
 - 2026-03-18: Added `scbiomarker.cli`, wired it to `run_pipeline`, and exposed the installed `scbiomarker` command through `[project.scripts]`.
 - 2026-03-18: Expanded the shared workflow parser with shell-friendly aliases (`--patient`, `--cell_type`, `--add_gene_embedding`, `--train_only`, `--analysis_only`) so the public CLI matches the frozen workflow contract.
 - 2026-03-18: Added CLI smoke coverage for help text, config override wiring, and analysis-only execution.
+- 2026-03-18: CLI now also accepts `--cell-type`, `--label`, `--sample`, `--treatment`, `--pathway`, and `--k`, and defaults full/train-only runs to GPU index `0` when no explicit `--gpu` is provided.
+- 2026-03-18: Re-ran `conda run -n scbiomarker env PYTHONPATH=. python tests/smoke_test_cli_endpoints.py` and `conda run -n scbiomarker env PYTHONPATH=. python tests/smoke_test_pipeline_endpoints.py` before closing the task.
 - 2026-03-18: Fresh-install command verification is intentionally deferred to T-009 in the separate `test` environment.

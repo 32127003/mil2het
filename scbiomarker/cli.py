@@ -12,11 +12,30 @@ def build_cli_arg_parser() -> argparse.ArgumentParser:
     parser.prog = "scbiomarker"
     parser.description = "Run the scbiomarker workflow from the command line."
     parser.add_argument("adata_input", nargs="?", default=None, help="Input .h5ad path.")
+    parser.add_argument("--patient", dest="patient_column", default=None, help="Patient column in adata.obs.")
+    parser.add_argument(
+        "--cell-type",
+        "--cell_type",
+        dest="celltype_column",
+        default=None,
+        help="Cell-type column in adata.obs.",
+    )
+    parser.add_argument("--label", dest="label_column", default=None, help="Label column in adata.obs.")
+    parser.add_argument("--sample", dest="sample_column", default=None, help="Optional sample column.")
+    parser.add_argument("--treatment", dest="treatment_column", default=None, help="Optional treatment column.")
     parser.add_argument(
         "--pathway-path",
+        "--pathway",
         dest="pathway_path",
         default=None,
         help="Pathway gene-set file for biomarker analysis.",
+    )
+    parser.add_argument(
+        "--k",
+        dest="k",
+        type=int,
+        default=None,
+        help="Number of preselected genes to keep for training/analysis.",
     )
     parser.add_argument(
         "--gpu",
@@ -60,11 +79,22 @@ def main(argv: Sequence[str] | None = None) -> PipelineResult:
     _apply_positional_adata_argument(args)
 
     config_overrides = workflow_config.workflow_overrides_from_args(args)
+    if args.k is not None:
+        config_overrides.setdefault("training", {})["k"] = int(args.k)
+
+    resolved_config = workflow_config.load_workflow_config_dict(
+        config_path=args.config_path,
+        overrides=config_overrides if config_overrides else None,
+    )
+    gpu_index = args.gpu_index
+    if gpu_index is None and not bool(resolved_config.get("analysis_only", False)):
+        gpu_index = 0
+
     result = run_pipeline(
         config_path=args.config_path,
         config_overrides=config_overrides,
         pathway_path=args.pathway_path,
-        gpu_index=args.gpu_index,
+        gpu_index=gpu_index,
     )
 
     for line in _result_lines(result):
