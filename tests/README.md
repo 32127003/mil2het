@@ -1,84 +1,68 @@
-# test_biomarker
+# scbiomarker tests
 
-Smoke-test project for the `scbiomarker` pip module.
+Canonical in-repo pytest suite for the `scbiomarker` package.
 
-## Refresh install
+## Local test setup
 
-Run from this workspace:
-
-```bash
-conda create -n test python=3.10
-conda activate test
-pip uninstall -y scbiomarker
-pip install git+ssh://git@github.com/32127003/scbiomarker.git@py_module
-```
-
-## Dependency notes
-
-- `CellEncoder` requires `torch`.
-- `MultipleInstanceLearning`, `biomarker`, and `train` require `torch_scatter` in addition to `torch`.
-- `split_dataset`, `preselection`, `biomarker`, and `train` require `scanpy`.
-- Wrapper modules intentionally raise installation guidance errors when these dependencies are missing.
-
-### Manual install required for `torch` and `torch_scatter`
-
-`scbiomarker` does not fully auto-install GPU stack dependencies. Install these manually in the `test` env:
+Create or reuse a development environment, then install the package plus pytest:
 
 ```bash
-# Install PyTorch first (choose the correct command for your system):
-# https://pytorch.org/get-started/locally/
-
-# Install torch_scatter with matching torch/cuda build
-conda run -n test pip install --no-build-isolation torch-scatter -f https://data.pyg.org/whl/torch-${TORCH}+${CUDA}.html
-
-# Example (if torch==2.10.0+cu128)
-conda run -n test pip install --no-build-isolation torch-scatter -f https://data.pyg.org/whl/torch-2.10.0+cu128.html
-
-# Verify
-conda run -n test python -c "import torch, torch_scatter; print(torch.__version__, torch.version.cuda, torch_scatter.__version__)"
+conda create -n scbiomarker-test python=3.10 -y
+conda run -n scbiomarker-test python -m pip install --upgrade pip setuptools wheel pytest
+conda run -n scbiomarker-test python -m pip install .
 ```
 
-## Run endpoint smoke tests
-
-Run all endpoint smoke tests:
+Torch-based tests still need manual installation of `torch` and `torch-scatter`:
 
 ```bash
-conda run -n test python test_biomarker/run_all_endpoint_smoke_tests.py
+# Install CPU-only torch for a chosen version.
+conda run -n scbiomarker-test python -m pip install \
+  --index-url https://download.pytorch.org/whl/cpu \
+  torch==2.5.1
+
+# Install matching CPU torch-scatter wheel.
+conda run -n scbiomarker-test python -m pip install --no-build-isolation \
+  torch-scatter \
+  -f https://data.pyg.org/whl/torch-2.5.1+cpu.html
 ```
 
-Run module-specific endpoint smoke tests:
+## Run pytest
+
+Run the full in-repo suite:
 
 ```bash
-conda run -n test python test_biomarker/smoke_test_cell_encoder_endpoints.py
-conda run -n test python test_biomarker/smoke_test_multiple_instance_learning_endpoints.py
-conda run -n test python test_biomarker/smoke_test_prior_interface_find_endpoints.py
-conda run -n test python test_biomarker/smoke_test_biomarker_endpoints.py
-conda run -n test python test_biomarker/smoke_test_split_dataset_endpoints.py
-conda run -n test python test_biomarker/smoke_test_preselection_endpoints.py
-conda run -n test python test_biomarker/smoke_test_train_endpoints.py
+conda run -n scbiomarker-test pytest tests -q
 ```
 
-Run the TODO-facing step-1 example smoke script:
+Run the CPU-only suite used by CI:
 
 ```bash
-conda run -n test python test_biomarker/smoke_test_todo_step1_examples.py
+conda run -n scbiomarker-test pytest tests --cpu-only -q
 ```
 
-This script covers both public step-1 entry styles:
-
-- CLI example:
-  `scbiomarker single_cell_data.h5ad --patient patient_id --cell_type celltype --label label --ppi /path/to/ppi.tsv --add_gene_embedding llm_view=/path/to/llm.pkl --add_gene_embedding ppi_view=/path/to/ppi.pkl --train_only`
-- Python import example:
-  `from scbiomarker import run_pipeline`
-  then call `run_pipeline(..., train_only=True)` with in-memory `AnnData` input.
-
-Run the shell wrapper for the installed pip CLI:
+Run a single module test file:
 
 ```bash
-bash test_biomarker/test_pip_cli_step1.sh
+conda run -n scbiomarker-test pytest tests/smoke_test_train_endpoints.py --cpu-only -q
 ```
 
-This checks that the installed `scbiomarker` command exists in the `test` env, that `scbiomarker --help` works, and then runs the TODO step-1 smoke example from the installed package environment.
+For convenience, the legacy smoke runner now dispatches to pytest:
+
+```bash
+conda run -n scbiomarker-test python tests/run_all_endpoint_smoke_tests.py --cpu-only -q
+```
+
+## CPU-only vs GPU-marked tests
+
+- `--cpu-only` skips tests marked with `@pytest.mark.gpu`.
+- Tests that only verify CLI wiring or run torch on CPU are not considered GPU tests.
+- The current suite is intended to be CPU-capable by default; the `gpu` marker exists so future CUDA-only tests can be filtered cleanly in CI.
+
+## CI scope
+
+- GitHub Actions treats `tests/` as the canonical package test suite.
+- CI validates the built wheel, installs CPU-only `torch` plus matching CPU `torch-scatter`, and runs `pytest tests --cpu-only -q`.
+- The separate workspace-level `test_biomarker` harness is not part of repo CI and remains a manual integration harness.
 
 ## Top-level exposed modules and aliases
 

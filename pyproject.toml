@@ -37,3 +37,10 @@ scbiomarker = ["*.yaml"]
 where = ["."]
 include = ["scbiomarker*", "modules*", "configs*", "scripts*"]
 exclude = ["data*", "experiment_asthma_find*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["smoke_test_*.py"]
+markers = [
+  "gpu: requires actual CUDA execution and is skipped when --cpu-only is used",
+]
