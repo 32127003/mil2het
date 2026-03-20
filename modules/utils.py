@@ -25,7 +25,6 @@ from sklearn.metrics import (
     precision_recall_fscore_support,
     roc_auc_score,
 )
-from tqdm import tqdm
 
 from scbiomarker.config import dict_to_namespace, load_workflow_config_dict
 
