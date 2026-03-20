@@ -11,7 +11,7 @@ import pickle
 import random
 from collections import Counter
 from types import SimpleNamespace
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -31,6 +31,51 @@ from scbiomarker.config import dict_to_namespace, load_workflow_config_dict
 MODULE_ROOT = os.path.abspath(os.path.dirname(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(MODULE_ROOT, ".."))
 DATA_ROOT = os.path.join(PROJECT_ROOT, "data")
+
+_tqdm_impl = None
+_tqdm_import_attempted = False
+
+
+class _TqdmFallback:
+    def __init__(self, iterable=None, **kwargs) -> None:
+        self.iterable = iterable
+        self.kwargs = kwargs
+
+    def __iter__(self) -> Iterator:
+        if self.iterable is None:
+            return iter(())
+        return iter(self.iterable)
+
+    def update(self, n: int = 1) -> None:
+        _ = n
+
+    def set_postfix(self, *args, **kwargs) -> None:
+        _ = args, kwargs
+
+    def close(self) -> None:
+        return None
+
+
+def _resolve_tqdm():
+    global _tqdm_impl, _tqdm_import_attempted
+    if not _tqdm_import_attempted:
+        try:
+            from tqdm import tqdm as _real_tqdm
+        except Exception:
+            _tqdm_impl = None
+        else:
+            _tqdm_impl = _real_tqdm
+        _tqdm_import_attempted = True
+    return _tqdm_impl
+
+
+def tqdm(iterable=None, **kwargs):
+    tqdm_impl = _resolve_tqdm()
+    if tqdm_impl is None:
+        return _TqdmFallback(iterable=iterable, **kwargs)
+    if iterable is None:
+        return tqdm_impl(**kwargs)
+    return tqdm_impl(iterable, **kwargs)
 
 
 def _data_path(*parts: str) -> str:

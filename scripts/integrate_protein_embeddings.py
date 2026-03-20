@@ -19,7 +19,6 @@ from typing import Dict, List, Sequence, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as torch_functional
-from tqdm import tqdm
 
 from utils import (
     DEFAULT_PREINTEGRATED_EMBEDDING_PATHS,
@@ -27,6 +26,7 @@ from utils import (
     _save_embedding_dict_to_path,
     build_embedding_matrix,
     load_protein_embedding_dict,
+    tqdm,
 )
 
 

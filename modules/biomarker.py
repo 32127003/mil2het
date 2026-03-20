@@ -29,11 +29,6 @@ import torch
 import torch.nn as nn
 from scipy import sparse
 from scipy.stats import spearmanr
-try:
-    from tqdm import tqdm
-except Exception:  # pragma: no cover
-    def tqdm(iterable, **kwargs):  # type: ignore[misc]
-        return iterable
 
 MODULE_DIR = os.path.abspath(os.path.dirname(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(MODULE_DIR, ".."))

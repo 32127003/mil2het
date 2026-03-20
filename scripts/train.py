@@ -42,7 +42,6 @@ from scipy import sparse
 from torch import autocast as torch_autocast
 from torch.cuda.amp import GradScaler
 from torch.utils.data import DataLoader, Dataset
-from tqdm import tqdm
 
 def autocast_cuda(enabled: bool):
     if not bool(enabled):
