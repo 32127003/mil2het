@@ -20,6 +20,6 @@
 - [x] T-006: extract reusable train/analysis phase APIs from script-style entrypoints
 - [x] T-007: add a top-level end-to-end Python pipeline API
 - [x] T-008: add a package CLI entrypoint with phase control and config overrides
-- [ ] T-009: validate the installable workflow end-to-end and document it in the test project
+- [x] T-009: validate the installable workflow end-to-end and document it in the test project
 
 ## Parked

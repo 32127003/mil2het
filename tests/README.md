@@ -58,6 +58,20 @@ conda run -n test python test_biomarker/smoke_test_preselection_endpoints.py
 conda run -n test python test_biomarker/smoke_test_train_endpoints.py
 ```
 
+Run the TODO-facing step-1 example smoke script:
+
+```bash
+conda run -n test python test_biomarker/smoke_test_todo_step1_examples.py
+```
+
+This script covers both public step-1 entry styles:
+
+- CLI example:
+  `scbiomarker single_cell_data.h5ad --patient patient_id --cell_type celltype --label label --ppi /path/to/ppi.tsv --add_gene_embedding llm_view=/path/to/llm.pkl --add_gene_embedding ppi_view=/path/to/ppi.pkl --train_only`
+- Python import example:
+  `from scbiomarker import run_pipeline`
+  then call `run_pipeline(..., train_only=True)` with in-memory `AnnData` input.
+
 ## Top-level exposed modules and aliases
 
 ```python
