@@ -72,6 +72,14 @@ This script covers both public step-1 entry styles:
   `from scbiomarker import run_pipeline`
   then call `run_pipeline(..., train_only=True)` with in-memory `AnnData` input.
 
+Run the shell wrapper for the installed pip CLI:
+
+```bash
+bash test_biomarker/test_pip_cli_step1.sh
+```
+
+This checks that the installed `scbiomarker` command exists in the `test` env, that `scbiomarker --help` works, and then runs the TODO step-1 smoke example from the installed package environment.
+
 ## Top-level exposed modules and aliases
 
 ```python
