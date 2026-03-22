@@ -1,6 +1,6 @@
-# scbiomarker tests
+# mil2het tests
 
-Canonical in-repo pytest suite for the `scbiomarker` package.
+Canonical in-repo pytest suite for the `mil2het` package.
 
 ## Local test setup
 
@@ -67,7 +67,7 @@ conda run -n scbiomarker-test python tests/run_all_endpoint_smoke_tests.py --cpu
 ## Top-level exposed modules and aliases
 
 ```python
-from scbiomarker import (
+from mil2het import (
     CellEncoder,
     MultipleInstanceLearning,
     prior_interface_find,
@@ -85,7 +85,7 @@ from scbiomarker import (
 
 ## Exposed endpoints by module
 
-### `scbiomarker.CellEncoder`
+### `mil2het.CellEncoder`
 
 - `GraphAttentionLayer`
 - `TransformerConvLayer`
@@ -94,17 +94,17 @@ from scbiomarker import (
 - `scatter_softmax`
 - `infer_batch_chunk_size`
 
-### `scbiomarker.MultipleInstanceLearning`
+### `mil2het.MultipleInstanceLearning`
 
 - `scatter_softmax_1d`
 - `GatedAttentionMIL`
 - `PatientMILAggregator`
 
-### `scbiomarker.prior_interface_find`
+### `mil2het.prior_interface_find`
 
 - `MultiViewPriorInterfaceFIND`
 
-### `scbiomarker.biomarker`
+### `mil2het.biomarker`
 
 - `BagDefinition`
 - `BagCache`
@@ -129,7 +129,7 @@ from scbiomarker import (
 - `parse_args`
 - `main`
 
-### `scbiomarker.split_dataset`
+### `mil2het.split_dataset`
 
 - `rebalance_empty_folds`
 - `rebalance_fold_sizes`
@@ -143,7 +143,7 @@ from scbiomarker import (
 - `patient_overlap_counts`
 - `build_and_save_folds`
 
-### `scbiomarker.preselection`
+### `mil2het.preselection`
 
 - `RWRConfig`
 - `read_gene_list`
@@ -160,7 +160,7 @@ from scbiomarker import (
 - `np_scores`
 - `preselection`
 
-### `scbiomarker.train`
+### `mil2het.train`
 
 - `autocast_cuda`
 - `ensure_cublas_workspace_config`

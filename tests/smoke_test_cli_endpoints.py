@@ -5,8 +5,8 @@ import tempfile
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from scbiomarker import cli
-from scbiomarker.pipeline import PipelineResult
+from mil2het import cli
+from mil2het.pipeline import PipelineResult
 
 from smoke_test_helpers import assert_module_endpoints, print_success
 
@@ -20,7 +20,7 @@ def test_cli_endpoints_exist() -> None:
     assert_module_endpoints(
         cli,
         CLI_ENDPOINTS,
-        module_label="scbiomarker.cli",
+        module_label="mil2het.cli",
     )
 
 
@@ -46,7 +46,7 @@ def build_fake_result(temp_path: Path) -> PipelineResult:
 
 def test_cli_help_and_override_wiring() -> None:
     help_text = cli.build_cli_arg_parser().format_help()
-    assert "scbiomarker" in help_text
+    assert "mil2het" in help_text
     assert "--config" in help_text
     assert "--gpu" in help_text
     assert "--analysis-only" in help_text

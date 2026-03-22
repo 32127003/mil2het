@@ -10,7 +10,7 @@ import pandas as pd
 import scanpy as sc
 import torch
 
-from scbiomarker import CellEncoder, MultipleInstanceLearning, train
+from mil2het import CellEncoder, MultipleInstanceLearning, train
 
 from smoke_test_helpers import assert_module_endpoints, print_success
 
@@ -58,7 +58,7 @@ def test_train_endpoints_exist() -> None:
     assert_module_endpoints(
         train,
         TRAIN_ENDPOINTS,
-        module_label="scbiomarker.train",
+        module_label="mil2het.train",
     )
 
 

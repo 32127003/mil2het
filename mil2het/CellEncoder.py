@@ -4,7 +4,7 @@ from importlib import import_module
 from types import ModuleType
 from typing import Any
 
-_IMPL_MODULE = "modules.prior_interface_find"
+_IMPL_MODULE = "modules.CellEncoder"
 _impl_module: ModuleType | None = None
 
 
@@ -14,10 +14,10 @@ def _load_impl_module() -> ModuleType:
         try:
             _impl_module = import_module(_IMPL_MODULE)
         except ModuleNotFoundError as error:
-            missing_name = str(getattr(error, "name", ""))
-            if missing_name == "torch":
+            missing_name = getattr(error, "name", "")
+            if str(missing_name) == "torch":
                 raise ModuleNotFoundError(
-                    "Missing dependency 'torch' required by scbiomarker prior_interface_find.\n"
+                    "Missing dependency 'torch' required by mil2het CellEncoder.\n"
                     "Install PyTorch for your system:\n"
                     "https://pytorch.org/get-started/locally/\n"
                 ) from error
@@ -38,5 +38,10 @@ def __dir__() -> list[str]:
 
 
 __all__ = [
-    "MultiViewPriorInterfaceFIND",
+    "GraphAttentionLayer",
+    "TransformerConvLayer",
+    "GraphCellEncoder",
+    "TransformerConvCellEncoder",
+    "scatter_softmax",
+    "infer_batch_chunk_size",
 ]

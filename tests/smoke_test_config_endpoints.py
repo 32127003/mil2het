@@ -3,7 +3,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from scbiomarker import config
+from mil2het import config
 
 from smoke_test_helpers import assert_module_endpoints, print_success
 
@@ -25,7 +25,7 @@ def test_config_endpoints_exist() -> None:
     assert_module_endpoints(
         config,
         CONFIG_ENDPOINTS,
-        module_label="scbiomarker.config",
+        module_label="mil2het.config",
     )
 
 

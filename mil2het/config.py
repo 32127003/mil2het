@@ -69,7 +69,7 @@ def _load_yaml_dict(path: str) -> dict[str, Any]:
 
 
 def load_default_config_dict() -> dict[str, Any]:
-    resource = files("scbiomarker").joinpath(DEFAULT_CONFIG_RESOURCE)
+    resource = files("mil2het").joinpath(DEFAULT_CONFIG_RESOURCE)
     return _load_yaml_dict(str(resource))
 
 
@@ -155,7 +155,7 @@ def normalize_workflow_config(config: Mapping[str, Any]) -> dict[str, Any]:
                 ("workflow", "output_root"),
                 ("output_root",),
             ),
-            "./outputs/scbiomarker",
+            "./outputs/mil2het",
         )
     ).strip()
     run_dir = str(
@@ -461,7 +461,7 @@ def _parse_embedding_arguments(values: Sequence[str] | None) -> dict[str, str]:
 
 
 def build_workflow_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Load scbiomarker workflow config.")
+    parser = argparse.ArgumentParser(description="Load mil2het workflow config.")
     parser.add_argument("--config", dest="config_path", default=None, help="External YAML config path.")
     parser.add_argument("--adata", dest="input_h5ad", default=None, help="Input .h5ad path.")
     parser.add_argument("--patient-column", "--patient", dest="patient_column", default=None)

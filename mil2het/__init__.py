@@ -18,19 +18,19 @@ from . import (
 
 def __getattr__(name: str) -> Any:
     lazy_exports = {
-        "GraphCellEncoder": ("scbiomarker.CellEncoder", "GraphCellEncoder"),
-        "TransformerConvCellEncoder": ("scbiomarker.CellEncoder", "TransformerConvCellEncoder"),
-        "GatedAttentionMIL": ("scbiomarker.MultipleInstanceLearning", "GatedAttentionMIL"),
-        "PatientMILAggregator": ("scbiomarker.MultipleInstanceLearning", "PatientMILAggregator"),
-        "MultiViewPriorInterfaceFIND": ("scbiomarker.prior_interface_find", "MultiViewPriorInterfaceFIND"),
-        "PipelineResult": ("scbiomarker.pipeline", "PipelineResult"),
-        "run_pipeline": ("scbiomarker.pipeline", "run_pipeline"),
+        "GraphCellEncoder": ("mil2het.CellEncoder", "GraphCellEncoder"),
+        "TransformerConvCellEncoder": ("mil2het.CellEncoder", "TransformerConvCellEncoder"),
+        "GatedAttentionMIL": ("mil2het.MultipleInstanceLearning", "GatedAttentionMIL"),
+        "PatientMILAggregator": ("mil2het.MultipleInstanceLearning", "PatientMILAggregator"),
+        "MultiViewPriorInterfaceFIND": ("mil2het.prior_interface_find", "MultiViewPriorInterfaceFIND"),
+        "PipelineResult": ("mil2het.pipeline", "PipelineResult"),
+        "run_pipeline": ("mil2het.pipeline", "run_pipeline"),
     }
     if name in lazy_exports:
         module_name, attr_name = lazy_exports[name]
         module = import_module(module_name)
         return getattr(module, attr_name)
-    raise AttributeError(f"module 'scbiomarker' has no attribute '{name}'")
+    raise AttributeError(f"module 'mil2het' has no attribute '{name}'")
 
 
 __all__ = [

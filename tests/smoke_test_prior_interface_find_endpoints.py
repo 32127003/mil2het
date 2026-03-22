@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import torch
-from scbiomarker import prior_interface_find
+from mil2het import prior_interface_find
 
 from smoke_test_helpers import assert_module_endpoints, print_success
 
@@ -14,7 +14,7 @@ def test_prior_interface_find_endpoint_exists() -> None:
     assert_module_endpoints(
         prior_interface_find,
         PRIOR_INTERFACE_FIND_ENDPOINTS,
-        module_label="scbiomarker.prior_interface_find",
+        module_label="mil2het.prior_interface_find",
     )
 
 

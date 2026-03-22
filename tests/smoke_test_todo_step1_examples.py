@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 
-from scbiomarker import cli, pipeline, run_pipeline
+from mil2het import cli, pipeline, run_pipeline
 
 from smoke_test_helpers import print_success
 

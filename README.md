@@ -1,4 +1,4 @@
-# scbiomarker
+# mil2het
 
 [![CI](https://github.com/user/scbiomarker/actions/workflows/ci.yml/badge.svg)](https://github.com/user/scbiomarker/actions/workflows/ci.yml)
 [![Python 3.10](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/release/python-3100/)
@@ -11,7 +11,7 @@ A Python toolkit for single-cell biomarker discovery using multiple instance lea
 
 ## Overview
 
-`scbiomarker` implements a two-phase workflow for identifying biomarkers from single-cell RNA sequencing data:
+`mil2het` implements a two-phase workflow for identifying biomarkers from single-cell RNA sequencing data:
 
 1. **Training Phase**: Learns cell-level representations using graph neural networks and aggregates patient-level predictions via multiple instance learning (MIL)
 2. **Analysis Phase**: Identifies candidate biomarkers through network propagation and multi-view prior integration
@@ -23,7 +23,7 @@ The module supports multi-view gene embeddings (e.g., protein language model emb
 ### From PyPI (recommended)
 
 ```bash
-pip install scbiomarker
+pip install mil2het
 ```
 
 ### With encoder support
@@ -31,7 +31,7 @@ pip install scbiomarker
 For GPU-accelerated cell encoding and training:
 
 ```bash
-pip install "scbiomarker[encoder]"
+pip install "mil2het[encoder]"
 pip install torch  # install PyTorch for your system
 pip install torch-scatter  # install matching your PyTorch version
 ```
@@ -56,14 +56,14 @@ pip install -e ".[encoder]"
 
 ```bash
 # Basic usage with required columns
-scbiomarker data.h5ad \
+mil2het data.h5ad \
   --patient patient_id \
   --celltype cell_type \
   --label condition \
   --ppi pathway_network.tsv
 
 # With multi-view gene embeddings
-scbiomarker data.h5ad \
+mil2het data.h5ad \
   --patient patient_id \
   --celltype cell_type \
   --label condition \
@@ -72,20 +72,20 @@ scbiomarker data.h5ad \
   --gene-embedding ppi=./embeddings/ppi_embeddings.pt
 
 # Training only (skip analysis)
-scbiomarker data.h5ad \
+mil2het data.h5ad \
   --patient patient_id \
   --celltype cell_type \
   --label condition \
   --train-only
 
 # Analysis only (requires pretrained checkpoint)
-scbiomarker --run-dir ./outputs/training_run --analysis-only
+mil2het --run-dir ./outputs/training_run --analysis-only
 ```
 
 ### Python API
 
 ```python
-from scbiomarker import run_pipeline, PipelineResult
+from mil2het import run_pipeline, PipelineResult
 
 # Run full pipeline
 result: PipelineResult = run_pipeline(
@@ -112,7 +112,7 @@ print(f"Phases completed: {result.phases_completed}")
 
 ```python
 import scanpy as sc
-from scbiomarker import run_pipeline
+from mil2het import run_pipeline
 
 adata = sc.read_h5ad("data.h5ad")
 
@@ -133,7 +133,7 @@ Use YAML configuration files for reproducible workflows:
 # config.yaml
 workflow:
   input_h5ad: "data.h5ad"
-  output_root: "./outputs/scbiomarker"
+  output_root: "./outputs/mil2het"
   num_folds: 5
   seed: 42
   train_only: false
@@ -160,7 +160,7 @@ training:
 ```
 
 ```bash
-scbiomarker --config config.yaml
+mil2het --config config.yaml
 ```
 
 ## Key Components
@@ -170,7 +170,7 @@ scbiomarker --config config.yaml
 Graph neural network encoders for learning cell representations:
 
 ```python
-from scbiomarker import GraphCellEncoder, TransformerConvCellEncoder
+from mil2het import GraphCellEncoder, TransformerConvCellEncoder
 
 # Graph attention-based encoder
 encoder = GraphCellEncoder(
@@ -192,7 +192,7 @@ encoder = TransformerConvCellEncoder(
 Patient-level aggregation using gated attention MIL:
 
 ```python
-from scbiomarker import GatedAttentionMIL, PatientMILAggregator
+from mil2het import GatedAttentionMIL, PatientMILAggregator
 
 mil = GatedAttentionMIL(
     input_dim=256,
@@ -204,7 +204,7 @@ mil = GatedAttentionMIL(
 ### Multi-View Prior Integration
 
 ```python
-from scbiomarker import MultiViewPriorInterfaceFIND
+from mil2het import MultiViewPriorInterfaceFIND
 
 prior = MultiViewPriorInterfaceFIND(
     embedding_views={"esm": emb_esm, "ppi": emb_ppi},
@@ -245,7 +245,7 @@ python -m build
 
 ## Citation
 
-If you use scbiomarker in your research, please cite:
+If you use mil2het in your research, please cite:
 
 ```bibtex
 @inproceedings{ju2026scbiomarker,

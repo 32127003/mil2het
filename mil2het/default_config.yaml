@@ -1,6 +1,6 @@
 workflow:
   input_h5ad: ""
-  output_root: "./outputs/scbiomarker"
+  output_root: "./outputs/mil2het"
   run_dir: ""
   analysis_output_dir: ""
   num_folds: 5

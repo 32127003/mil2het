@@ -9,8 +9,8 @@ from .pipeline import PipelineResult, run_pipeline
 
 def build_cli_arg_parser() -> argparse.ArgumentParser:
     parser = workflow_config.build_workflow_arg_parser()
-    parser.prog = "scbiomarker"
-    parser.description = "Run the scbiomarker workflow from the command line."
+    parser.prog = "mil2het"
+    parser.description = "Run the mil2het workflow from the command line."
     parser.add_argument("adata_input", nargs="?", default=None, help="Input .h5ad path.")
     parser.add_argument(
         "--pathway-path",

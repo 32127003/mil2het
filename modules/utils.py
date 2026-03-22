@@ -26,7 +26,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
-from scbiomarker.config import dict_to_namespace, load_workflow_config_dict
+from mil2het.config import dict_to_namespace, load_workflow_config_dict
 
 MODULE_ROOT = os.path.abspath(os.path.dirname(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(MODULE_ROOT, ".."))

@@ -147,7 +147,7 @@ def _materialize_adata(adata: AnnData, output_root: str) -> str:
     with tempfile.NamedTemporaryFile(
         mode="wb",
         suffix=".h5ad",
-        prefix="scbiomarker_input_",
+        prefix="mil2het_input_",
         dir=str(target_dir),
         delete=False,
     ) as handle:

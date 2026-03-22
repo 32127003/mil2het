@@ -17,13 +17,13 @@ def _load_impl_module() -> ModuleType:
             missing_name = str(getattr(error, "name", ""))
             if missing_name == "torch":
                 raise ModuleNotFoundError(
-                    "Missing dependency 'torch' required by scbiomarker biomarker module.\n"
+                    "Missing dependency 'torch' required by mil2het biomarker module.\n"
                     "Install PyTorch for your system:\n"
                     "https://pytorch.org/get-started/locally/\n"
                 ) from error
             if missing_name == "torch_scatter":
                 raise ModuleNotFoundError(
-                    "Missing optional dependency 'torch_scatter' required by scbiomarker biomarker module.\n"
+                    "Missing optional dependency 'torch_scatter' required by mil2het biomarker module.\n"
                     "Install dependencies with matching PyTorch/CUDA versions:\n"
                     "1) Install CUDA-specific PyTorch for your system:\n"
                     "   https://pytorch.org/get-started/locally/\n"

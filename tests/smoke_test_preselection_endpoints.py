@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 
-from scbiomarker import preselection
+from mil2het import preselection
 
 from smoke_test_helpers import assert_module_endpoints, print_success
 
@@ -63,7 +63,7 @@ def test_preselection_endpoints_exist() -> None:
     assert_module_endpoints(
         preselection,
         PRESELECTION_ENDPOINTS,
-        module_label="scbiomarker.preselection",
+        module_label="mil2het.preselection",
     )
 
 

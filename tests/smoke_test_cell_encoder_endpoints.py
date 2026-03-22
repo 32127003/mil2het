@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import torch
-from scbiomarker import CellEncoder
+from mil2het import CellEncoder
 
 from smoke_test_helpers import assert_module_endpoints, print_success
 
@@ -32,7 +32,7 @@ def test_cell_encoder_endpoints_exist() -> None:
     assert_module_endpoints(
         CellEncoder,
         CELL_ENCODER_ENDPOINTS,
-        module_label="scbiomarker.CellEncoder",
+        module_label="mil2het.CellEncoder",
     )
 
 

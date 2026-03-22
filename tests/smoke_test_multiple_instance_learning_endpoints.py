@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import torch
-from scbiomarker import MultipleInstanceLearning
+from mil2het import MultipleInstanceLearning
 
 from smoke_test_helpers import assert_module_endpoints, print_success
 
@@ -16,7 +16,7 @@ def test_mil_endpoints_exist() -> None:
     assert_module_endpoints(
         MultipleInstanceLearning,
         MULTIPLE_INSTANCE_LEARNING_ENDPOINTS,
-        module_label="scbiomarker.MultipleInstanceLearning",
+        module_label="mil2het.MultipleInstanceLearning",
     )
 
 

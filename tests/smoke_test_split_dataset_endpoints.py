@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import numpy as np
 import scanpy as sc
 
-from scbiomarker import split_dataset
+from mil2het import split_dataset
 
 from smoke_test_helpers import assert_module_endpoints, print_success
 
@@ -40,7 +40,7 @@ def test_split_dataset_endpoints_exist() -> None:
     assert_module_endpoints(
         split_dataset,
         SPLIT_DATASET_ENDPOINTS,
-        module_label="scbiomarker.split_dataset",
+        module_label="mil2het.split_dataset",
     )
 
 

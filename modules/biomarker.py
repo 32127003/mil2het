@@ -39,7 +39,7 @@ if PROJECT_ROOT not in sys.path:
 
 from CellEncoder import GraphCellEncoder, TransformerConvCellEncoder
 from MultipleInstanceLearning import PatientMILAggregator
-from scbiomarker.config import dict_to_namespace, load_workflow_config_dict
+from mil2het.config import dict_to_namespace, load_workflow_config_dict
 from utils import *
 
 

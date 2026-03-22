@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 
-from scbiomarker import pipeline, run_pipeline
+from mil2het import pipeline, run_pipeline
 
 from smoke_test_helpers import assert_module_endpoints, print_success
 
@@ -21,7 +21,7 @@ def test_pipeline_endpoints_exist() -> None:
     assert_module_endpoints(
         pipeline,
         PIPELINE_ENDPOINTS,
-        module_label="scbiomarker.pipeline",
+        module_label="mil2het.pipeline",
     )
     assert callable(run_pipeline)
 

@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from scbiomarker import CellEncoder, MultipleInstanceLearning, biomarker
+from mil2het import CellEncoder, MultipleInstanceLearning, biomarker
 
 from smoke_test_helpers import assert_module_endpoints, print_success
 
@@ -77,7 +77,7 @@ def test_biomarker_endpoints_exist() -> None:
     assert_module_endpoints(
         biomarker,
         BIOMARKER_ENDPOINTS,
-        module_label="scbiomarker.biomarker",
+        module_label="mil2het.biomarker",
     )
 
 
