@@ -895,6 +895,64 @@ def load_k_np_genes(
 
     return selected, genes
 
+
+def _candidate_training_preselection_roots(root_path: str, split_number: int, split_subdir: str) -> List[str]:
+    normalized_root = str(root_path).strip()
+    if normalized_root == "":
+        return []
+
+    normalized_basename = os.path.basename(os.path.normpath(normalized_root))
+    if normalized_basename.startswith("split_"):
+        return [normalized_root]
+    if normalized_basename == split_subdir:
+        return [
+            os.path.join(normalized_root, f"split_idx_{split_number}"),
+            os.path.join(normalized_root, f"split_{split_number}"),
+            normalized_root,
+        ]
+    return [
+        os.path.join(normalized_root, f"split_{split_number}"),
+        os.path.join(normalized_root, split_subdir, f"split_idx_{split_number}"),
+        os.path.join(normalized_root, split_subdir, f"split_{split_number}"),
+        normalized_root,
+    ]
+
+
+def resolve_training_preselection_root(config: SimpleNamespace) -> str:
+    split_number = int(getattr(config, "split_number", 0))
+    split_subdir = sanitize_filename_component(
+        str(getattr(config, "split_preselection_subdir", "split_preselection"))
+    )
+    dataset_root = os.path.join(PROJECT_ROOT, "data", str(config.dataset))
+
+    configured_root_candidates = [
+        str(getattr(config, "preselection_root", "") or "").strip(),
+        str(getattr(config, "preselection_output_root", "") or "").strip(),
+        os.path.join(dataset_root, "preselection"),
+        os.path.join(dataset_root, split_subdir),
+    ]
+
+    candidates: List[str] = []
+    for root_path in configured_root_candidates:
+        for candidate in _candidate_training_preselection_roots(
+            root_path=root_path,
+            split_number=split_number,
+            split_subdir=split_subdir,
+        ):
+            if candidate not in candidates:
+                candidates.append(candidate)
+
+    for candidate in candidates:
+        if not os.path.isdir(candidate):
+            continue
+        if os.path.isdir(os.path.join(candidate, "NP")) or os.path.isdir(os.path.join(candidate, "DEG")):
+            return str(candidate)
+
+    raise FileNotFoundError(
+        "split-specific preselection directory not found. "
+        f"Tried: {candidates}. Run modules/preselection.py first."
+    )
+
 def _embedding_source_path_for_logging(
     source_name: str,
     configured_paths: Optional[Dict[str, str]],
@@ -2687,13 +2745,8 @@ def run_training_phase(config, *, device=None):
     patient_index_to_name = {int(index): str(name) for name, index in patient_mapping.items()}
 
     print("loading preselection data...", flush=True)
-    preselection_root = str(
-        getattr(config, "preselection_root", "")
-        or getattr(config, "preselection_output_root", "")
-        or os.path.join(PROJECT_ROOT, "data", config.dataset, "preselection", f"split_{int(config.split_number)}")
-    )
-    if not os.path.isdir(preselection_root):
-        raise FileNotFoundError(f"split-specific preselection directory not found: {preselection_root}. Run modules/preselection.py first.")
+    preselection_root = resolve_training_preselection_root(config)
+    config.preselection_root = str(preselection_root)
 
 
     np_source_path = os.path.join(preselection_root, "NP", "NP_max.tsv")

@@ -362,7 +362,8 @@ def test_train_run_training_phase_direct_call() -> None:
         with (splits_dir / "toy_idx_0.pkl").open("wb") as file_handle:
             pickle.dump([[0, 1], [2, 3], [4, 5]], file_handle)
 
-        preselection_root = temp_path / "preselection" / "split_0"
+        preselection_output_root = temp_path / "preselection"
+        preselection_root = preselection_output_root / "split_0"
         (preselection_root / "DEG").mkdir(parents=True)
         (preselection_root / "NP").mkdir(parents=True)
 
@@ -376,7 +377,8 @@ def test_train_run_training_phase_direct_call() -> None:
         config.adata_path = str(adata_path)
         config.adata_directory = str(temp_path)
         config.splits_directory = str(splits_dir)
-        config.preselection_root = str(preselection_root)
+        config.preselection_root = ""
+        config.preselection_output_root = str(preselection_output_root)
         config.experiment_root = str(temp_path / "experiment")
         config.patient_column = "patient_id"
         config.label_column = "label"
@@ -424,6 +426,8 @@ def test_train_run_training_phase_direct_call() -> None:
                 del args, kwargs
                 self.weight = torch.nn.Parameter(torch.zeros(1))
 
+        observed_preselection_roots: list[str] = []
+
         def fake_build_experiment_directory(cfg):
             del cfg
             output_dir = temp_path / "run"
@@ -444,11 +448,13 @@ def test_train_run_training_phase_direct_call() -> None:
             }
 
         def fake_load_k_np_genes(*args, **kwargs):
-            del args, kwargs
+            del args
+            observed_preselection_roots.append(str(kwargs.get("preselection_root", "")))
             return ["G1", "G2"], ["G1", "G2"]
 
         def fake_build_graph_cache(*args, **kwargs):
-            del args, kwargs
+            del args
+            observed_preselection_roots.append(str(kwargs.get("preselection_root", "")))
             return (
                 torch.zeros((2, 0), dtype=torch.long),
                 torch.zeros((1, 2, 3), dtype=torch.float32),
@@ -538,6 +544,8 @@ def test_train_run_training_phase_direct_call() -> None:
 
         assert Path(artifacts["output_dir"]).is_dir()
         assert Path(artifacts["best_checkpoint_path"]).is_file()
+        assert observed_preselection_roots
+        assert set(observed_preselection_roots) == {str(preselection_root)}
 
 
 def main() -> None:
