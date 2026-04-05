@@ -97,9 +97,36 @@ def test_config_loading_and_precedence() -> None:
         assert namespace.skip_analysis is True
 
 
+def test_config_rejects_training_epochs_below_five() -> None:
+    try:
+        config.load_workflow_config_dict(
+            overrides={
+                "workflow": {"input_h5ad": "/tmp/toy.h5ad"},
+                "training": {"epochs": 4},
+            }
+        )
+    except ValueError as error:
+        assert "epochs >= 5" in str(error)
+    else:
+        raise AssertionError("expected epochs<5 to fail loudly when training is enabled")
+
+    analysis_only = config.load_workflow_config_dict(
+        overrides={
+            "workflow": {
+                "analysis_only": True,
+                "run_dir": "/tmp/existing_run",
+            },
+            "training": {"epochs": 1},
+        }
+    )
+    assert analysis_only["analysis_only"] is True
+    assert analysis_only["epochs"] == 1
+
+
 def main() -> None:
     test_config_endpoints_exist()
     test_config_loading_and_precedence()
+    test_config_rejects_training_epochs_below_five()
     print_success("config endpoints")
 
 

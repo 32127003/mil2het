@@ -372,6 +372,11 @@ def normalize_workflow_config(config: Mapping[str, Any]) -> dict[str, Any]:
             normalized["epochs"],
         )
     )
+    if not analysis_only and int(normalized["epochs"]) < 5:
+        raise ValueError(
+            "mil2het workflow requires epochs >= 5 when training is enabled, "
+            f"received epochs={int(normalized['epochs'])}."
+        )
     normalized["lr"] = float(
         _coalesce(
             config,
