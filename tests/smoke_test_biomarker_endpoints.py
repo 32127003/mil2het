@@ -137,9 +137,32 @@ def test_biomarker_config_and_path_helpers() -> None:
         located = biomarker.locate_run_snapshot_config_path(str(run_dir))
         assert os.path.samefile(located, workflow_snapshot)
 
+        cwd_relative_dir = temp_path / "cwd_relative"
+        cwd_relative_dir.mkdir(parents=True)
+        cwd_relative_snapshot = cwd_relative_dir / "workflow_config.yaml"
+        cwd_relative_snapshot.write_text("workflow:\n  input_h5ad: /tmp/cwd_relative.h5ad\n", encoding="utf-8")
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(str(temp_path))
+            cwd_relative_located = biomarker.locate_run_snapshot_config_path(
+                str(run_dir),
+                cli_config=os.path.join("cwd_relative", "workflow_config.yaml"),
+            )
+        finally:
+            os.chdir(original_cwd)
+        assert os.path.samefile(cwd_relative_located, cwd_relative_snapshot)
+
         base_dirs = biomarker.build_resolution_base_dirs(str(snapshot_copy), str(run_dir))
         resolved = biomarker.resolve_path_with_base_dirs(base_dirs, "asthma_config.py", prefer_existing=True)
         assert os.path.samefile(resolved, snapshot_copy)
+
+        run_relative_snapshot = run_dir / "explicit_workflow.yaml"
+        run_relative_snapshot.write_text("workflow:\n  input_h5ad: /tmp/run_relative.h5ad\n", encoding="utf-8")
+        run_relative_located = biomarker.locate_run_snapshot_config_path(
+            str(run_dir),
+            cli_config="explicit_workflow.yaml",
+        )
+        assert os.path.samefile(run_relative_located, run_relative_snapshot)
 
         workflow_snapshot.unlink()
         legacy_located = biomarker.locate_run_snapshot_config_path(str(run_dir))

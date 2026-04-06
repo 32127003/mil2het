@@ -198,12 +198,23 @@ def infer_split_number_from_run_dir(run_dir: str) -> Optional[int]:
 def locate_run_snapshot_config_path(run_dir: str, cli_config: str = "") -> str:
     cli_text = str(cli_config).strip()
     if cli_text != "":
-        config_candidate = (
-            cli_text if os.path.isabs(cli_text) else os.path.abspath(os.path.join(run_dir, cli_text))
+        if os.path.isabs(cli_text):
+            config_candidates = [os.path.abspath(cli_text)]
+        else:
+            config_candidates = [
+                os.path.abspath(cli_text),
+                os.path.abspath(os.path.join(run_dir, cli_text)),
+            ]
+        for config_candidate in config_candidates:
+            if os.path.isfile(config_candidate):
+                return config_candidate
+        if len(config_candidates) == 1:
+            raise FileNotFoundError(f"Config file not found: {config_candidates[0]}")
+        raise FileNotFoundError(
+            "Config file not found. "
+            f"Tried current working directory path {config_candidates[0]} "
+            f"and run_dir-relative path {config_candidates[1]}."
         )
-        if not os.path.isfile(config_candidate):
-            raise FileNotFoundError(f"Config file not found: {config_candidate}")
-        return config_candidate
 
     candidates = [
         os.path.join(run_dir, "workflow_config.yaml"),
