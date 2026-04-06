@@ -41,10 +41,12 @@ def test_run_pipeline_full_train_only_and_analysis_only() -> None:
         temp_path = Path(temp_dir)
         output_root = temp_path / "outputs"
         ppi_path = temp_path / "toy_ppi.tsv"
-        embedding_path = temp_path / "toy_view.pkl"
+        node2vec_path = temp_path / "node2vec.pkl"
+        esm3_path = temp_path / "esm3.pkl"
         pathway_path = temp_path / "toy_pathways.json"
         ppi_path.write_text("protein1\tprotein2\n", encoding="utf-8")
-        embedding_path.write_bytes(b"placeholder")
+        node2vec_path.write_bytes(b"placeholder")
+        esm3_path.write_bytes(b"placeholder")
         pathway_path.write_text('{"toy_pathway": ["G1", "G2"]}\n', encoding="utf-8")
 
         call_order: list[str] = []
@@ -107,7 +109,7 @@ def test_run_pipeline_full_train_only_and_analysis_only() -> None:
                 celltype_column="celltype",
                 label_column="label",
                 ppi_path=str(ppi_path),
-                embedding_views={"toy_view": str(embedding_path)},
+                embedding_views={"node2vec": str(node2vec_path), "esm3": str(esm3_path)},
                 output_root=str(output_root),
                 pathway_path=str(pathway_path),
                 split_number=0,
@@ -133,7 +135,12 @@ def test_run_pipeline_full_train_only_and_analysis_only() -> None:
             assert snapshot_payload["workflow"]["input_h5ad"].endswith(".h5ad")
             assert snapshot_payload["workflow"]["output_root"] == str(output_root)
             assert snapshot_payload["columns"]["patient"] == "patient_id"
-            assert snapshot_payload["resources"]["embedding_views"] == {"toy_view": str(embedding_path)}
+            assert list(snapshot_payload["resources"]["embedding_views"].keys()) == ["node2vec", "esm3"]
+            assert snapshot_payload["resources"]["embedding_views"] == {
+                "node2vec": str(node2vec_path),
+                "esm3": str(esm3_path),
+            }
+            assert snapshot_payload["prior_view_sources"] == ["node2vec", "esm3"]
             assert snapshot_payload["training"]["epochs"] == 5
             assert snapshot_payload["run_dir"] == str(full_result.run_dir)
 
@@ -145,7 +152,7 @@ def test_run_pipeline_full_train_only_and_analysis_only() -> None:
                 celltype_column="celltype",
                 label_column="label",
                 ppi_path=str(ppi_path),
-                embedding_views={"toy_view": str(embedding_path)},
+                embedding_views={"node2vec": str(node2vec_path), "esm3": str(esm3_path)},
                 output_root=str(output_root / "train_only"),
                 pathway_path=str(pathway_path),
                 train_only=True,
@@ -162,7 +169,7 @@ def test_run_pipeline_full_train_only_and_analysis_only() -> None:
                 run_dir=str(full_result.run_dir),
                 analysis_output_dir=str(output_root / "analysis_only" / "analysis"),
                 pathway_path=str(pathway_path),
-                embedding_views={"toy_view": str(embedding_path)},
+                embedding_views={"node2vec": str(node2vec_path), "esm3": str(esm3_path)},
                 ppi_path=str(ppi_path),
                 analysis_only=True,
                 gpu_index=-1,

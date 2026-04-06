@@ -167,6 +167,18 @@ def test_train_model_spec_embeddings_and_optimizer() -> None:
         assert set(custom_by_view.keys()) == {"LLM_view"}
         assert custom_by_view["LLM_view"].shape == (2, 2)
 
+        ordered_sources = train._resolve_embedding_view_sources(
+            SimpleNamespace(
+                protein_embedding_paths={
+                    "esm3": str(temp_path / "esm3.pt"),
+                    "node2vec": str(temp_path / "node2vec.pt"),
+                },
+                prior_view_sources=["node2vec", "esm3"],
+                protein_embedding_sources=["node2vec", "esm3"],
+            )
+        )
+        assert ordered_sources == ["node2vec", "ESM3"]
+
         missing_embedding_path = temp_path / "missing_view.pkl"
         with missing_embedding_path.open("wb") as file_handle:
             pickle.dump(

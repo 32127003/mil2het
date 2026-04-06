@@ -153,6 +153,18 @@ def test_biomarker_config_and_path_helpers() -> None:
     device = biomarker.resolve_device(gpu_index=-1, config=SimpleNamespace(device="cpu", cuda_device_index=0))
     assert device.type == "cpu"
 
+    ordered_sources = biomarker._resolve_embedding_view_sources(
+        SimpleNamespace(
+            protein_embedding_paths={
+                "esm3": "/tmp/esm3.pt",
+                "node2vec": "/tmp/node2vec.pt",
+            },
+            prior_view_sources=["node2vec", "esm3"],
+            protein_embedding_sources=["node2vec", "esm3"],
+        )
+    )
+    assert ordered_sources == ["node2vec", "ESM3"]
+
 
 def test_biomarker_feature_builders_and_metrics() -> None:
     graph_spec = biomarker.resolve_cell_encoder_spec(

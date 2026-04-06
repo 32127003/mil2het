@@ -641,8 +641,6 @@ def _normalized_configured_embedding_paths(config: SimpleNamespace) -> Optional[
 def _resolve_embedding_view_sources(config: SimpleNamespace) -> List[str]:
     configured_paths = _normalized_configured_embedding_paths(config)
     candidate_sources: List[str] = []
-    if isinstance(configured_paths, dict):
-        candidate_sources.extend(str(name) for name in configured_paths.keys())
 
     for attribute_name in ("prior_view_sources", "protein_embedding_sources"):
         raw_values = getattr(config, attribute_name, [])
@@ -652,6 +650,9 @@ def _resolve_embedding_view_sources(config: SimpleNamespace) -> List[str]:
             text = str(raw_value).strip()
             if text != "":
                 candidate_sources.append(text)
+
+    if isinstance(configured_paths, dict):
+        candidate_sources.extend(str(name) for name in configured_paths.keys())
 
     return _deduplicate_preserve_order(
         [_canonical_embedding_source_name(source_name) for source_name in candidate_sources]

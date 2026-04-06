@@ -161,7 +161,7 @@ def _write_config_snapshot(config_dict: Mapping[str, Any], target_path: str) -> 
     target.parent.mkdir(parents=True, exist_ok=True)
     snapshot_dict = workflow_config.serialize_workflow_config_snapshot(config_dict)
     with target.open("w", encoding="utf-8") as handle:
-        yaml.safe_dump(snapshot_dict, handle, sort_keys=True)
+        yaml.safe_dump(snapshot_dict, handle, sort_keys=False)
     return str(target)
 
 

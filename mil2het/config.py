@@ -158,6 +158,20 @@ def _normalize_embedding_views(value: Any) -> dict[str, str]:
     return normalized
 
 
+def _normalize_string_list(value: Any, *, field_name: str) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, Mapping):
+        raise ValueError(f"{field_name} must be a list of source names, not a mapping.")
+    raw_values = [value] if isinstance(value, str) else list(value)
+    normalized: list[str] = []
+    for raw_value in raw_values:
+        text = str(raw_value).strip()
+        if text != "":
+            normalized.append(text)
+    return normalized
+
+
 def _infer_dataset_name(config: Mapping[str, Any], input_h5ad: str) -> str:
     dataset_value = str(_coalesce(config, (("dataset",),), "")).strip()
     if dataset_value != "":
@@ -561,6 +575,28 @@ def normalize_workflow_config(config: Mapping[str, Any]) -> dict[str, Any]:
             {},
         )
     )
+    protein_embedding_sources = _normalize_string_list(
+        _coalesce(
+            config,
+            (
+                ("protein_embedding_sources",),
+                ("prior_view_sources",),
+            ),
+            list(embedding_views.keys()),
+        ),
+        field_name="protein_embedding_sources",
+    )
+    prior_view_sources = _normalize_string_list(
+        _coalesce(
+            config,
+            (
+                ("prior_view_sources",),
+                ("protein_embedding_sources",),
+            ),
+            list(embedding_views.keys()),
+        ),
+        field_name="prior_view_sources",
+    )
 
     positive_labels = list(
         _coalesce(
@@ -630,8 +666,12 @@ def normalize_workflow_config(config: Mapping[str, Any]) -> dict[str, Any]:
     normalized["embedding_views"] = embedding_views
     normalized["gene_embedding_views"] = copy.deepcopy(embedding_views)
     normalized["protein_embedding_paths"] = copy.deepcopy(embedding_views)
-    normalized["protein_embedding_sources"] = list(embedding_views.keys())
-    normalized["prior_view_sources"] = list(embedding_views.keys())
+    normalized["protein_embedding_sources"] = (
+        protein_embedding_sources if len(protein_embedding_sources) > 0 else list(embedding_views.keys())
+    )
+    normalized["prior_view_sources"] = (
+        prior_view_sources if len(prior_view_sources) > 0 else list(embedding_views.keys())
+    )
     normalized["binary_positive_labels"] = [str(value) for value in positive_labels]
     normalized["binary_negative_labels"] = [str(value) for value in negative_labels]
     normalized["binary_positive_label"] = str(positive_labels[0])

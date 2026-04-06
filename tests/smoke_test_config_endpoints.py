@@ -185,11 +185,47 @@ def test_legacy_flat_snapshot_round_trip() -> None:
         assert loaded["biomarker_output_dir"] == "/tmp/out/analysis"
 
 
+def test_config_preserves_explicit_embedding_source_order() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        custom_yaml = temp_path / "ordered.yml"
+        custom_yaml.write_text(
+            "\n".join(
+                [
+                    "workflow:",
+                    "  input_h5ad: /tmp/custom_data.h5ad",
+                    "columns:",
+                    "  patient: patient_id",
+                    "  celltype: celltype",
+                    "  label: response",
+                    "resources:",
+                    "  embedding_views:",
+                    "    esm3: /tmp/esm3.pt",
+                    "    node2vec: /tmp/node2vec.pt",
+                    "prior_view_sources:",
+                    "  - node2vec",
+                    "  - esm3",
+                    "protein_embedding_sources:",
+                    "  - node2vec",
+                    "  - esm3",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        loaded = config.load_workflow_config_dict(config_path=str(custom_yaml))
+        assert list(loaded["embedding_views"].keys()) == ["esm3", "node2vec"]
+        assert loaded["prior_view_sources"] == ["node2vec", "esm3"]
+        assert loaded["protein_embedding_sources"] == ["node2vec", "esm3"]
+
+
 def main() -> None:
     test_config_endpoints_exist()
     test_config_loading_and_precedence()
     test_config_rejects_training_epochs_below_five()
     test_legacy_flat_snapshot_round_trip()
+    test_config_preserves_explicit_embedding_source_order()
     print_success("config endpoints")
 
 
