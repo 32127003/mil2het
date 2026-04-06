@@ -159,8 +159,9 @@ def _materialize_adata(adata: AnnData, output_root: str) -> str:
 def _write_config_snapshot(config_dict: Mapping[str, Any], target_path: str) -> str:
     target = Path(target_path).resolve()
     target.parent.mkdir(parents=True, exist_ok=True)
+    snapshot_dict = workflow_config.serialize_workflow_config_snapshot(config_dict)
     with target.open("w", encoding="utf-8") as handle:
-        yaml.safe_dump(dict(config_dict), handle, sort_keys=True)
+        yaml.safe_dump(snapshot_dict, handle, sort_keys=True)
     return str(target)
 
 
@@ -317,11 +318,18 @@ def run_pipeline(
             os.path.join(effective_run_dir, "workflow_config.yaml"),
         )
     else:
-        generated_config_dir = Path(str(config_dict["output_root"])).resolve() / "generated_configs"
-        config_snapshot_path = _write_config_snapshot(
-            config_dict,
-            str(generated_config_dir / "analysis_workflow_config.yaml"),
-        )
+        if config_path is not None and str(config_path).strip() != "":
+            config_snapshot_path = str(Path(str(config_path)).resolve())
+        else:
+            run_snapshot_path = Path(str(effective_run_dir)).resolve() / "workflow_config.yaml"
+            if run_snapshot_path.is_file():
+                config_snapshot_path = str(run_snapshot_path)
+            else:
+                generated_config_dir = Path(str(config_dict["output_root"])).resolve() / "generated_configs"
+                config_snapshot_path = _write_config_snapshot(
+                    config_dict,
+                    str(generated_config_dir / "analysis_workflow_config.yaml"),
+                )
 
     if not bool(config_dict["train_only"]):
         analysis_artifacts = dict(

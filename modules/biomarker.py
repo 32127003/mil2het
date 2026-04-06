@@ -205,7 +205,10 @@ def locate_run_snapshot_config_path(run_dir: str, cli_config: str = "") -> str:
             raise FileNotFoundError(f"Config file not found: {config_candidate}")
         return config_candidate
 
-    candidates = [os.path.join(run_dir, "asthma_config.py")]
+    candidates = [
+        os.path.join(run_dir, "workflow_config.yaml"),
+        os.path.join(run_dir, "asthma_config.py"),
+    ]
     candidates.extend(
         sorted(
             os.path.join(run_dir, file_name)
@@ -223,8 +226,8 @@ def locate_run_snapshot_config_path(run_dir: str, cli_config: str = "") -> str:
             return normalized
 
     raise FileNotFoundError(
-        "No config snapshot (*.py) found in run_dir. "
-        "Expected run_dir/asthma_config.py or another *_config.py."
+        "No config snapshot found in run_dir. "
+        "Expected run_dir/workflow_config.yaml, run_dir/asthma_config.py, or another *_config.py."
     )
 
 

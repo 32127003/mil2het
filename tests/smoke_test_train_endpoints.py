@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import pickle
 from pathlib import Path
@@ -345,6 +346,49 @@ def test_train_model_spec_embeddings_and_optimizer() -> None:
     assert callable(train.run_epoch)
 
 
+def test_run_recovery_artifact_writer() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        artifacts = {
+            "run_config_path": str(temp_path / "run_config.json"),
+            "metadata_path": str(temp_path / "metadata.json"),
+        }
+        run_config_payload = {
+            "timestamp": "2026-04-06T00:00:00",
+            "resolved_paths": {
+                "adata_path": "/tmp/toy_data.h5ad",
+                "run_dir": "/tmp/run_dir",
+            },
+            "config": {
+                "dataset": "toy",
+                "split_number": 0,
+            },
+        }
+        metadata_payload = {
+            "label_mapping": {"1": 1, "0": 0},
+            "celltype_mapping": {"T": 0, "B": 1},
+            "treatment_mapping": {"NA": 0},
+        }
+
+        train._write_run_recovery_artifacts(
+            artifacts=artifacts,
+            run_config_payload=run_config_payload,
+            metadata_payload=metadata_payload,
+        )
+
+        with open(artifacts["run_config_path"], "r", encoding="utf-8") as handle:
+            saved_run_config = json.load(handle)
+        with open(artifacts["metadata_path"], "r", encoding="utf-8") as handle:
+            saved_metadata = json.load(handle)
+
+        assert saved_run_config["resolved_paths"]["adata_path"] == "/tmp/toy_data.h5ad"
+        assert saved_run_config["resolved_paths"]["run_dir"] == "/tmp/run_dir"
+        assert saved_run_config["config"]["dataset"] == "toy"
+        assert saved_metadata["label_mapping"] == {"1": 1, "0": 0}
+        assert saved_metadata["celltype_mapping"] == {"T": 0, "B": 1}
+        assert saved_metadata["treatment_mapping"] == {"NA": 0}
+
+
 def test_train_run_training_phase_direct_call() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -437,6 +481,8 @@ def test_train_run_training_phase_direct_call() -> None:
             return {
                 "output_dir": str(output_dir),
                 "cache_dir": str(cache_dir),
+                "run_config_path": str(output_dir / "run_config.json"),
+                "metadata_path": str(output_dir / "metadata.json"),
                 "history_path": str(output_dir / "history.csv"),
                 "train_step_log_path": str(output_dir / "train_step_metrics.csv"),
                 "val_step_log_path": str(output_dir / "val_step_metrics.csv"),
@@ -544,6 +590,18 @@ def test_train_run_training_phase_direct_call() -> None:
 
         assert Path(artifacts["output_dir"]).is_dir()
         assert Path(artifacts["best_checkpoint_path"]).is_file()
+        assert Path(artifacts["run_config_path"]).is_file()
+        assert Path(artifacts["metadata_path"]).is_file()
+        with open(artifacts["run_config_path"], "r", encoding="utf-8") as handle:
+            run_config_payload = json.load(handle)
+        with open(artifacts["metadata_path"], "r", encoding="utf-8") as handle:
+            metadata_payload = json.load(handle)
+        assert run_config_payload["resolved_paths"]["adata_path"] == str(adata_path)
+        assert run_config_payload["resolved_paths"]["preselection_root"] == str(preselection_root)
+        assert run_config_payload["resolved_paths"]["run_dir"] == str(Path(artifacts["output_dir"]))
+        assert metadata_payload["label_mapping"] == {"0": 0, "1": 1}
+        assert metadata_payload["celltype_mapping"] == {"B": 0, "T": 1}
+        assert metadata_payload["treatment_mapping"] == {"NA": 0}
         assert observed_preselection_roots
         assert set(observed_preselection_roots) == {str(preselection_root)}
 
@@ -552,6 +610,7 @@ def main() -> None:
     test_train_endpoints_exist()
     test_train_runtime_and_dataset_helpers()
     test_train_model_spec_embeddings_and_optimizer()
+    test_run_recovery_artifact_writer()
     test_train_run_training_phase_direct_call()
     print_success("train endpoints")
 

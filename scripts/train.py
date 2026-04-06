@@ -2046,6 +2046,8 @@ def build_experiment_directory(config):
     return {
         "output_dir": output_dir,
         "cache_dir": cache_dir,
+        "run_config_path": os.path.join(output_dir, "run_config.json"),
+        "metadata_path": os.path.join(output_dir, "metadata.json"),
         "history_path": os.path.join(output_dir, "history.csv"),
         "train_step_log_path": os.path.join(output_dir, "train_step_metrics.csv"),
         "val_step_log_path": os.path.join(output_dir, "val_step_metrics.csv"),
@@ -2055,6 +2057,15 @@ def build_experiment_directory(config):
         "last_checkpoint_path": os.path.join(output_dir, "last_checkpoint.pt"),
         "epoch5_checkpoint_path": os.path.join(output_dir, "epoch5_checkpoint.pt"),
     }
+
+
+def _write_run_recovery_artifacts(
+    artifacts: Dict[str, str],
+    run_config_payload: Dict[str, object],
+    metadata_payload: Dict[str, object],
+) -> None:
+    save_json(str(artifacts["run_config_path"]), run_config_payload)
+    save_json(str(artifacts["metadata_path"]), metadata_payload)
 
 
 def build_dataloader_kwargs(config: SimpleNamespace, device: torch.device) -> Dict[str, object]:
@@ -2691,18 +2702,6 @@ def run_training_phase(config, *, device=None):
     if config.deterministic_algorithms:
         torch.use_deterministic_algorithms(True, warn_only=bool(config.deterministic_warn_only))
     artifacts = build_experiment_directory(config)
-   
-
-    run_config_payload = {
-        "timestamp": datetime.now().isoformat(),
-        "resolved_paths": {
-            "experiment_root": str(config.experiment_root),
-            "adata_directory": str(config.adata_directory),
-            "ppi_path": str(config.ppi_path),
-            "splits_directory": str(config.splits_directory),
-        },
-        "config": config.__dict__,
-    }
     config_module_file = os.path.join(PROJECT_ROOT, "configs", f"config.py")
     shutil.copy2(config_module_file, os.path.join(artifacts["output_dir"], os.path.basename(config_module_file)))
     
@@ -2747,6 +2746,36 @@ def run_training_phase(config, *, device=None):
     print("loading preselection data...", flush=True)
     preselection_root = resolve_training_preselection_root(config)
     config.preselection_root = str(preselection_root)
+    setattr(config, "run_dir", str(artifacts["output_dir"]))
+
+    output_root_value = str(getattr(config, "output_root", "") or "").strip()
+    if output_root_value == "":
+        output_root_value = str(Path(str(config.experiment_root)).resolve().parent)
+    run_config_payload = {
+        "timestamp": datetime.now().isoformat(),
+        "resolved_paths": {
+            "adata_path": str(adata_path),
+            "adata_directory": str(config.adata_directory),
+            "output_root": str(output_root_value),
+            "experiment_root": str(config.experiment_root),
+            "splits_directory": str(config.splits_directory),
+            "preselection_output_root": str(getattr(config, "preselection_output_root", "") or ""),
+            "preselection_root": str(preselection_root),
+            "ppi_path": str(config.ppi_path),
+            "run_dir": str(artifacts["output_dir"]),
+        },
+        "config": dict(config.__dict__),
+    }
+    metadata_payload = {
+        "label_mapping": {str(key): int(value) for key, value in label_mapping.items()},
+        "celltype_mapping": {str(key): int(value) for key, value in celltype_mapping.items()},
+        "treatment_mapping": {str(key): int(value) for key, value in treatment_mapping.items()},
+    }
+    _write_run_recovery_artifacts(
+        artifacts=artifacts,
+        run_config_payload=run_config_payload,
+        metadata_payload=metadata_payload,
+    )
 
 
     np_source_path = os.path.join(preselection_root, "NP", "NP_max.tsv")

@@ -15,6 +15,28 @@ from configs.config import asthma_split_configuration, asthma_train_configuratio
 DEFAULT_CONFIG_RESOURCE = "default_config.yaml"
 
 _DICT_REPLACE_KEYS = {"embedding_views"}
+_SNAPSHOT_SECTION_KEYS = {"workflow", "columns", "labels", "resources", "training"}
+_SNAPSHOT_RUNTIME_KEYS = {
+    "dataset",
+    "adata_path",
+    "adata_directory",
+    "splits_directory",
+    "preselection_output_root",
+    "experiment_root",
+    "biomarker_run_dir",
+    "biomarker_output_dir",
+}
+_LEGACY_SNAPSHOT_MARKERS = {
+    "adata_path",
+    "adata_directory",
+    "splits_directory",
+    "preselection_output_root",
+    "experiment_root",
+    "biomarker_run_dir",
+    "biomarker_output_dir",
+    "gene_embedding_views",
+    "protein_embedding_paths",
+}
 
 _LEGACY_DEFAULTS = copy.deepcopy(asthma_train_configuration)
 _LEGACY_DEFAULTS.update(
@@ -97,6 +119,27 @@ def _coalesce(config: Mapping[str, Any], paths: Sequence[Sequence[str]], default
     return default
 
 
+def _snapshot_value(
+    config: Mapping[str, Any],
+    paths: Sequence[Sequence[str]],
+    default: Any = None,
+) -> Any:
+    for path in paths:
+        found, value = _nested_get(config, *path)
+        if not found or value is None:
+            continue
+        if isinstance(value, str):
+            if value.strip() == "":
+                continue
+            return value
+        if isinstance(value, Mapping) and len(value) == 0:
+            continue
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)) and len(value) == 0:
+            continue
+        return value
+    return default
+
+
 def _normalize_embedding_views(value: Any) -> dict[str, str]:
     if value is None:
         return {}
@@ -132,6 +175,270 @@ def _build_output_path(base_dir: str, leaf: str, explicit: str) -> str:
     if explicit_text != "":
         return explicit_text
     return os.path.join(base_dir, leaf)
+
+
+def _build_snapshot_sections(config: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "workflow": {
+            "input_h5ad": str(
+                _snapshot_value(
+                    config,
+                    (
+                        ("workflow", "input_h5ad"),
+                        ("input_h5ad",),
+                        ("adata_path",),
+                    ),
+                    "",
+                )
+            ).strip(),
+            "output_root": str(
+                _snapshot_value(
+                    config,
+                    (
+                        ("workflow", "output_root"),
+                        ("output_root",),
+                    ),
+                    "",
+                )
+            ).strip(),
+            "run_dir": str(
+                _snapshot_value(
+                    config,
+                    (
+                        ("workflow", "run_dir"),
+                        ("run_dir",),
+                        ("biomarker_run_dir",),
+                    ),
+                    "",
+                )
+            ).strip(),
+            "analysis_output_dir": str(
+                _snapshot_value(
+                    config,
+                    (
+                        ("workflow", "analysis_output_dir"),
+                        ("analysis_output_dir",),
+                        ("biomarker_output_dir",),
+                    ),
+                    "",
+                )
+            ).strip(),
+            "num_folds": int(
+                _snapshot_value(
+                    config,
+                    (
+                        ("workflow", "num_folds"),
+                        ("num_folds",),
+                    ),
+                    _LEGACY_DEFAULTS["num_folds"],
+                )
+            ),
+            "split_number": int(
+                _snapshot_value(
+                    config,
+                    (
+                        ("workflow", "split_number"),
+                        ("split_number",),
+                    ),
+                    0,
+                )
+            ),
+            "seed": int(
+                _snapshot_value(
+                    config,
+                    (
+                        ("workflow", "seed"),
+                        ("seed",),
+                    ),
+                    _LEGACY_DEFAULTS["seed"],
+                )
+            ),
+            "train_only": bool(
+                _snapshot_value(
+                    config,
+                    (
+                        ("workflow", "train_only"),
+                        ("train_only",),
+                        ("skip_analysis",),
+                    ),
+                    False,
+                )
+            ),
+            "analysis_only": bool(
+                _snapshot_value(
+                    config,
+                    (
+                        ("workflow", "analysis_only"),
+                        ("analysis_only",),
+                    ),
+                    False,
+                )
+            ),
+        },
+        "columns": {
+            "patient": str(
+                _snapshot_value(
+                    config,
+                    (
+                        ("columns", "patient"),
+                        ("patient_column",),
+                    ),
+                    "",
+                )
+            ).strip(),
+            "celltype": str(
+                _snapshot_value(
+                    config,
+                    (
+                        ("columns", "celltype"),
+                        ("celltype_column",),
+                    ),
+                    "",
+                )
+            ).strip(),
+            "label": str(
+                _snapshot_value(
+                    config,
+                    (
+                        ("columns", "label"),
+                        ("label_column",),
+                    ),
+                    "",
+                )
+            ).strip(),
+            "sample": _snapshot_value(
+                config,
+                (
+                    ("columns", "sample"),
+                    ("sample_column",),
+                ),
+                None,
+            ),
+            "treatment": _snapshot_value(
+                config,
+                (
+                    ("columns", "treatment"),
+                    ("treatment_column",),
+                ),
+                None,
+            ),
+        },
+        "labels": {
+            "positive": [
+                str(value)
+                for value in _snapshot_value(
+                    config,
+                    (
+                        ("labels", "positive"),
+                        ("binary_positive_labels",),
+                    ),
+                    ["1"],
+                )
+            ],
+            "negative": [
+                str(value)
+                for value in _snapshot_value(
+                    config,
+                    (
+                        ("labels", "negative"),
+                        ("binary_negative_labels",),
+                    ),
+                    ["0"],
+                )
+            ],
+        },
+        "resources": {
+            "ppi_path": str(
+                _snapshot_value(
+                    config,
+                    (
+                        ("resources", "ppi_path"),
+                        ("ppi_path",),
+                    ),
+                    "",
+                )
+            ).strip(),
+            "embedding_views": _normalize_embedding_views(
+                _snapshot_value(
+                    config,
+                    (
+                        ("resources", "embedding_views"),
+                        ("embedding_views",),
+                        ("gene_embedding_views",),
+                        ("protein_embedding_paths",),
+                    ),
+                    {},
+                )
+            ),
+        },
+        "training": {
+            "epochs": int(
+                _snapshot_value(
+                    config,
+                    (
+                        ("training", "epochs"),
+                        ("epochs",),
+                    ),
+                    _LEGACY_DEFAULTS["epochs"],
+                )
+            ),
+            "lr": float(
+                _snapshot_value(
+                    config,
+                    (
+                        ("training", "lr"),
+                        ("lr",),
+                    ),
+                    _LEGACY_DEFAULTS["lr"],
+                )
+            ),
+            "k": int(
+                _snapshot_value(
+                    config,
+                    (
+                        ("training", "k"),
+                        ("k",),
+                    ),
+                    _LEGACY_DEFAULTS["k"],
+                )
+            ),
+        },
+    }
+
+
+def serialize_workflow_config_snapshot(config: Mapping[str, Any]) -> dict[str, Any]:
+    snapshot = copy.deepcopy(dict(config))
+    _deep_merge(snapshot, _build_snapshot_sections(config))
+    for key in _SNAPSHOT_RUNTIME_KEYS:
+        if key in config:
+            snapshot[str(key)] = copy.deepcopy(config[str(key)])
+    return snapshot
+
+
+def _looks_like_flat_workflow_snapshot(config: Mapping[str, Any]) -> bool:
+    if any(key in config for key in _LEGACY_SNAPSHOT_MARKERS):
+        return True
+    return all(key not in config for key in _SNAPSHOT_SECTION_KEYS) and any(
+        key in config
+        for key in {
+            "input_h5ad",
+            "output_root",
+            "run_dir",
+            "patient_column",
+            "celltype_column",
+            "label_column",
+            "ppi_path",
+            "epochs",
+            "lr",
+            "k",
+        }
+    )
+
+
+def upgrade_legacy_flat_workflow_snapshot(config: Mapping[str, Any]) -> dict[str, Any]:
+    upgraded = copy.deepcopy(dict(config))
+    _deep_merge(upgraded, _build_snapshot_sections(config))
+    return upgraded
 
 
 def normalize_workflow_config(config: Mapping[str, Any]) -> dict[str, Any]:
@@ -431,7 +738,10 @@ def load_workflow_config_dict(
 ) -> dict[str, Any]:
     merged = copy.deepcopy(load_default_config_dict())
     if config_path is not None and str(config_path).strip() != "":
-        _deep_merge(merged, load_yaml_config_dict(str(config_path)))
+        loaded = load_yaml_config_dict(str(config_path))
+        if _looks_like_flat_workflow_snapshot(loaded):
+            loaded = upgrade_legacy_flat_workflow_snapshot(loaded)
+        _deep_merge(merged, loaded)
     if overrides:
         _deep_merge(merged, overrides)
     return normalize_workflow_config(merged)

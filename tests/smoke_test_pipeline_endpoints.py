@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import scanpy as sc
+import yaml
 
 from mil2het import pipeline, run_pipeline
 
@@ -112,7 +113,7 @@ def test_run_pipeline_full_train_only_and_analysis_only() -> None:
                 split_number=0,
                 num_folds=3,
                 seed=0,
-                epochs=1,
+                epochs=5,
                 lr=0.01,
                 k=2,
                 train_only=False,
@@ -128,6 +129,13 @@ def test_run_pipeline_full_train_only_and_analysis_only() -> None:
             assert analysis_calls[0][4] == -1
             assert call_order == ["split", "preselection", "training", "analysis"]
             assert split_calls[0].input_h5ad.endswith(".h5ad")
+            snapshot_payload = yaml.safe_load(Path(full_result.config_snapshot_path).read_text(encoding="utf-8"))
+            assert snapshot_payload["workflow"]["input_h5ad"].endswith(".h5ad")
+            assert snapshot_payload["workflow"]["output_root"] == str(output_root)
+            assert snapshot_payload["columns"]["patient"] == "patient_id"
+            assert snapshot_payload["resources"]["embedding_views"] == {"toy_view": str(embedding_path)}
+            assert snapshot_payload["training"]["epochs"] == 5
+            assert snapshot_payload["run_dir"] == str(full_result.run_dir)
 
             call_order.clear()
             analysis_calls.clear()
@@ -169,7 +177,7 @@ def test_run_pipeline_full_train_only_and_analysis_only() -> None:
             assert len(train_calls) == 2
             assert len(analysis_calls) == 1
             assert analysis_calls[0][0] == full_result.run_dir
-            assert analysis_calls[0][1].endswith(".yaml")
+            assert analysis_calls[0][1] == full_result.config_snapshot_path
         finally:
             pipeline.split_dataset.run_split_generation = original_split
             pipeline.preselection.run_split_preselection = original_preselection

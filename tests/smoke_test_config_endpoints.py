@@ -123,10 +123,73 @@ def test_config_rejects_training_epochs_below_five() -> None:
     assert analysis_only["epochs"] == 1
 
 
+def test_legacy_flat_snapshot_round_trip() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        flat_snapshot = temp_path / "workflow_config.yaml"
+        flat_snapshot.write_text(
+            "\n".join(
+                [
+                    "input_h5ad: /tmp/toy_data.h5ad",
+                    "adata_path: /tmp/toy_data.h5ad",
+                    "output_root: /tmp/out",
+                    "run_dir: /tmp/out/training/train_runs/toy_run",
+                    "analysis_output_dir: /tmp/out/analysis",
+                    "patient_column: patient_id",
+                    "celltype_column: celltype",
+                    "label_column: label",
+                    "ppi_path: /tmp/ppi.tsv",
+                    "embedding_views:",
+                    "  toy: /tmp/toy.pkl",
+                    "binary_positive_labels:",
+                    "  - 'yes'",
+                    "binary_negative_labels:",
+                    "  - 'no'",
+                    "epochs: 12",
+                    "lr: 0.01",
+                    "k: 64",
+                    "dataset: toy",
+                    "adata_directory: /tmp",
+                    "splits_directory: /tmp/out/splits",
+                    "preselection_output_root: /tmp/out/preselection",
+                    "experiment_root: /tmp/out/training",
+                    "biomarker_run_dir: /tmp/out/training/train_runs/toy_run",
+                    "biomarker_output_dir: /tmp/out/analysis",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        loaded = config.load_workflow_config_dict(config_path=str(flat_snapshot))
+        assert loaded["input_h5ad"] == "/tmp/toy_data.h5ad"
+        assert loaded["adata_path"] == "/tmp/toy_data.h5ad"
+        assert loaded["output_root"] == "/tmp/out"
+        assert loaded["run_dir"] == "/tmp/out/training/train_runs/toy_run"
+        assert loaded["analysis_output_dir"] == "/tmp/out/analysis"
+        assert loaded["patient_column"] == "patient_id"
+        assert loaded["celltype_column"] == "celltype"
+        assert loaded["label_column"] == "label"
+        assert loaded["ppi_path"] == "/tmp/ppi.tsv"
+        assert loaded["embedding_views"] == {"toy": "/tmp/toy.pkl"}
+        assert loaded["binary_positive_labels"] == ["yes"]
+        assert loaded["binary_negative_labels"] == ["no"]
+        assert loaded["epochs"] == 12
+        assert loaded["lr"] == 0.01
+        assert loaded["k"] == 64
+        assert loaded["dataset"] == "toy"
+        assert loaded["splits_directory"] == "/tmp/out/splits"
+        assert loaded["preselection_output_root"] == "/tmp/out/preselection"
+        assert loaded["experiment_root"] == "/tmp/out/training"
+        assert loaded["biomarker_run_dir"] == "/tmp/out/training/train_runs/toy_run"
+        assert loaded["biomarker_output_dir"] == "/tmp/out/analysis"
+
+
 def main() -> None:
     test_config_endpoints_exist()
     test_config_loading_and_precedence()
     test_config_rejects_training_epochs_below_five()
+    test_legacy_flat_snapshot_round_trip()
     print_success("config endpoints")
 
 

@@ -129,15 +129,21 @@ def test_biomarker_config_and_path_helpers() -> None:
 
         run_dir = temp_path / "run_dir"
         run_dir.mkdir(parents=True)
+        workflow_snapshot = run_dir / "workflow_config.yaml"
+        workflow_snapshot.write_text("workflow:\n  input_h5ad: /tmp/toy_data.h5ad\n", encoding="utf-8")
         snapshot_copy = run_dir / "asthma_config.py"
         snapshot_copy.write_text("config = {'dataset': 'asthma'}\n", encoding="utf-8")
 
         located = biomarker.locate_run_snapshot_config_path(str(run_dir))
-        assert os.path.samefile(located, snapshot_copy)
+        assert os.path.samefile(located, workflow_snapshot)
 
         base_dirs = biomarker.build_resolution_base_dirs(str(snapshot_copy), str(run_dir))
         resolved = biomarker.resolve_path_with_base_dirs(base_dirs, "asthma_config.py", prefer_existing=True)
         assert os.path.samefile(resolved, snapshot_copy)
+
+        workflow_snapshot.unlink()
+        legacy_located = biomarker.locate_run_snapshot_config_path(str(run_dir))
+        assert os.path.samefile(legacy_located, snapshot_copy)
 
     dataset_hint = biomarker.infer_dataset_hint_from_run_dir("/tmp/asthma_ext_split_0")
     assert dataset_hint == "asthma_ext"
