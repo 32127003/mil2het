@@ -608,9 +608,9 @@ def test_train_run_training_phase_direct_call() -> None:
             run_config_payload = json.load(handle)
         with open(artifacts["metadata_path"], "r", encoding="utf-8") as handle:
             metadata_payload = json.load(handle)
-        assert run_config_payload["resolved_paths"]["adata_path"] == str(adata_path)
-        assert run_config_payload["resolved_paths"]["preselection_root"] == str(preselection_root)
-        assert run_config_payload["resolved_paths"]["run_dir"] == str(Path(artifacts["output_dir"]))
+        assert run_config_payload["resolved_paths"]["adata_path"] == str(adata_path.resolve())
+        assert run_config_payload["resolved_paths"]["preselection_root"] == str(preselection_root.resolve())
+        assert run_config_payload["resolved_paths"]["run_dir"] == str(Path(artifacts["output_dir"]).resolve())
         assert metadata_payload["label_mapping"] == {"0": 0, "1": 1}
         assert metadata_payload["celltype_mapping"] == {"B": 0, "T": 1}
         assert metadata_payload["treatment_mapping"] == {"NA": 0}

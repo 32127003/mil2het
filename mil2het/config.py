@@ -457,6 +457,12 @@ def upgrade_legacy_flat_workflow_snapshot(config: Mapping[str, Any]) -> dict[str
 
 def normalize_workflow_config(config: Mapping[str, Any]) -> dict[str, Any]:
     normalized = copy.deepcopy(_LEGACY_DEFAULTS)
+    legacy_top_level_overrides = {
+        str(key): copy.deepcopy(value)
+        for key, value in config.items()
+        if str(key) not in _SNAPSHOT_SECTION_KEYS
+    }
+    _deep_merge(normalized, legacy_top_level_overrides)
 
     input_h5ad = str(
         _coalesce(

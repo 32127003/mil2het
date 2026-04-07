@@ -89,7 +89,7 @@ def test_todo_cli_train_only_example() -> None:
         try:
             stdout_buffer = io.StringIO()
             with redirect_stdout(stdout_buffer):
-                result = cli.main(
+                result = cli.run_cli(
                     [
                         str(adata_path),
                         "--patient",

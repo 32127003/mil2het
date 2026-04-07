@@ -587,17 +587,20 @@ def test_biomarker_run_analysis_phase_smoke() -> None:
 
         original_read_h5ad = impl_module.sc.read_h5ad
         original_resolve_preselection_root = impl_module.resolve_preselection_root
+        original_cwd = Path.cwd()
         impl_module.sc.read_h5ad = lambda path: toy_adata
         impl_module.resolve_preselection_root = lambda config: str(preselection_root)
         try:
+            os.chdir(temp_path)
             result = biomarker.run_analysis_phase(
                 str(run_dir),
                 config_path=str(config_path),
-                output_dir=str(output_dir),
-                pathway_path=str(pathway_path),
+                output_dir=output_dir.name,
+                pathway_path=pathway_path.name,
                 gpu_index=-1,
             )
         finally:
+            os.chdir(original_cwd)
             impl_module.sc.read_h5ad = original_read_h5ad
             impl_module.resolve_preselection_root = original_resolve_preselection_root
 

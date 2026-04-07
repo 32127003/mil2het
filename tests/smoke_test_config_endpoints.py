@@ -54,6 +54,8 @@ def test_config_loading_and_precedence() -> None:
                     "training:",
                     "  epochs: 12",
                     "  lr: 0.005",
+                    "biomarker_pathway_gene_set_path: /tmp/toy_pathways.json",
+                    "biomarker_min_pathway_size: 2",
                 ]
             )
             + "\n",
@@ -68,6 +70,8 @@ def test_config_loading_and_precedence() -> None:
         assert loaded["lr"] == 0.005
         assert loaded["protein_embedding_paths"] == {"ESM3": "/tmp/esm3.pt"}
         assert loaded["prior_view_sources"] == ["ESM3"]
+        assert loaded["biomarker_pathway_gene_set_path"] == "/tmp/toy_pathways.json"
+        assert loaded["biomarker_min_pathway_size"] == 2
 
         parsed = config.parse_workflow_cli_args(
             [
@@ -88,6 +92,8 @@ def test_config_loading_and_precedence() -> None:
         assert parsed.config.analysis_only is False
         assert parsed.config.protein_embedding_paths == {"LLM": "/tmp/llm.pt"}
         assert parsed.config.prior_view_sources == ["LLM"]
+        assert parsed.config.biomarker_pathway_gene_set_path == "/tmp/toy_pathways.json"
+        assert parsed.config.biomarker_min_pathway_size == 2
 
         namespace = config.load_workflow_config_namespace(
             config_path=str(custom_yaml),
@@ -220,12 +226,34 @@ def test_config_preserves_explicit_embedding_source_order() -> None:
         assert loaded["protein_embedding_sources"] == ["node2vec", "esm3"]
 
 
+def test_config_preserves_top_level_biomarker_pathway_aliases() -> None:
+    loaded = config.load_workflow_config_dict(
+        overrides={
+            "workflow": {
+                "input_h5ad": "/tmp/custom_data.h5ad",
+            },
+            "columns": {
+                "patient": "patient_id",
+                "celltype": "celltype",
+                "label": "label",
+            },
+            "pathway_gene_set_path": "/tmp/pathways.json",
+            "biomarker_pathway_gene_set_path": "/tmp/biomarker_pathways.json",
+            "biomarker_min_pathway_size": 3,
+        }
+    )
+    assert loaded["pathway_gene_set_path"] == "/tmp/pathways.json"
+    assert loaded["biomarker_pathway_gene_set_path"] == "/tmp/biomarker_pathways.json"
+    assert loaded["biomarker_min_pathway_size"] == 3
+
+
 def main() -> None:
     test_config_endpoints_exist()
     test_config_loading_and_precedence()
     test_config_rejects_training_epochs_below_five()
     test_legacy_flat_snapshot_round_trip()
     test_config_preserves_explicit_embedding_source_order()
+    test_config_preserves_top_level_biomarker_pathway_aliases()
     print_success("config endpoints")
 
 

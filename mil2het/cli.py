@@ -62,7 +62,7 @@ def _result_lines(result: PipelineResult) -> list[str]:
     return lines
 
 
-def main(argv: Sequence[str] | None = None) -> PipelineResult:
+def run_cli(argv: Sequence[str] | None = None) -> PipelineResult:
     parser = build_cli_arg_parser()
     args = parser.parse_args(argv)
     _apply_positional_adata_argument(args)
@@ -91,7 +91,13 @@ def main(argv: Sequence[str] | None = None) -> PipelineResult:
     return result
 
 
+def main(argv: Sequence[str] | None = None) -> int:
+    run_cli(argv)
+    return 0
+
+
 __all__ = [
     "build_cli_arg_parser",
     "main",
+    "run_cli",
 ]

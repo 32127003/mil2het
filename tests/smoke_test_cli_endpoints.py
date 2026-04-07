@@ -13,6 +13,7 @@ from smoke_test_helpers import assert_module_endpoints, print_success
 CLI_ENDPOINTS = [
     "build_cli_arg_parser",
     "main",
+    "run_cli",
 ]
 
 
@@ -72,7 +73,7 @@ def test_cli_help_and_override_wiring() -> None:
         try:
             stdout_buffer = io.StringIO()
             with redirect_stdout(stdout_buffer):
-                cli.main(
+                result = cli.run_cli(
                     [
                         "toy_data.h5ad",
                         "--config",
@@ -101,6 +102,7 @@ def test_cli_help_and_override_wiring() -> None:
         finally:
             cli.run_pipeline = original_run_pipeline
 
+        assert result.phases_completed == ("split", "preselection", "training")
         kwargs = captured_kwargs["kwargs"]
         assert kwargs["config_path"] == str(config_path)
         assert kwargs["gpu_index"] == -1
@@ -134,7 +136,7 @@ def test_cli_analysis_only_wiring() -> None:
 
         cli.run_pipeline = fake_run_pipeline
         try:
-            cli.main(
+            result = cli.run_cli(
                 [
                     "--analysis-only",
                     "--run-dir",
@@ -150,6 +152,7 @@ def test_cli_analysis_only_wiring() -> None:
         finally:
             cli.run_pipeline = original_run_pipeline
 
+        assert result.phases_completed == ("split", "preselection", "training")
         kwargs = captured_kwargs["kwargs"]
         assert kwargs["pathway_path"] == "/tmp/pathways.json"
         assert kwargs["gpu_index"] == -1
@@ -192,7 +195,7 @@ def test_cli_defaults_training_gpu_to_zero() -> None:
 
         cli.run_pipeline = fake_run_pipeline
         try:
-            cli.main(
+            result = cli.run_cli(
                 [
                     "toy_data.h5ad",
                     "--config",
@@ -202,8 +205,27 @@ def test_cli_defaults_training_gpu_to_zero() -> None:
         finally:
             cli.run_pipeline = original_run_pipeline
 
+        assert result.phases_completed == ("split", "preselection", "training")
         kwargs = captured_kwargs["kwargs"]
         assert kwargs["gpu_index"] == 0
+
+
+def test_cli_main_returns_success_exit_code() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        original_run_cli = cli.run_cli
+
+        def fake_run_cli(argv=None):
+            del argv
+            return build_fake_result(temp_path)
+
+        cli.run_cli = fake_run_cli
+        try:
+            exit_code = cli.main([])
+        finally:
+            cli.run_cli = original_run_cli
+
+        assert exit_code == 0
 
 
 def main() -> None:
@@ -211,6 +233,7 @@ def main() -> None:
     test_cli_help_and_override_wiring()
     test_cli_analysis_only_wiring()
     test_cli_defaults_training_gpu_to_zero()
+    test_cli_main_returns_success_exit_code()
     print_success("cli endpoints")
 
 

@@ -192,9 +192,124 @@ def test_run_pipeline_full_train_only_and_analysis_only() -> None:
             pipeline.biomarker.run_analysis_phase = original_analysis
 
 
+def test_run_pipeline_config_file_preserves_biomarker_settings() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        output_root = temp_path / "outputs"
+        input_h5ad = temp_path / "toy_data.h5ad"
+        build_toy_adata().write_h5ad(input_h5ad)
+
+        ppi_path = temp_path / "toy_ppi.tsv"
+        node2vec_path = temp_path / "node2vec.pkl"
+        esm3_path = temp_path / "esm3.pkl"
+        pathway_path = temp_path / "toy_pathways.json"
+        config_path = temp_path / "workflow_config.yaml"
+        ppi_path.write_text("protein1\tprotein2\n", encoding="utf-8")
+        node2vec_path.write_bytes(b"placeholder")
+        esm3_path.write_bytes(b"placeholder")
+        pathway_path.write_text('{"toy_pathway": ["G1", "G2"]}\n', encoding="utf-8")
+        config_path.write_text(
+            "\n".join(
+                [
+                    "workflow:",
+                    f"  input_h5ad: {input_h5ad}",
+                    f"  output_root: {output_root}",
+                    "  num_folds: 3",
+                    "columns:",
+                    "  patient: patient_id",
+                    "  celltype: celltype",
+                    "  label: label",
+                    "resources:",
+                    f"  ppi_path: {ppi_path}",
+                    "  embedding_views:",
+                    f"    node2vec: {node2vec_path}",
+                    f"    esm3: {esm3_path}",
+                    "training:",
+                    "  epochs: 5",
+                    "  k: 2",
+                    f"biomarker_pathway_gene_set_path: {pathway_path}",
+                    "biomarker_min_pathway_size: 2",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        call_order: list[str] = []
+        analysis_calls: list[tuple[str, str, str, str, int | None]] = []
+        original_split = pipeline.split_dataset.run_split_generation
+        original_preselection = pipeline.preselection.run_split_preselection
+        original_train = pipeline.train.run_training_phase
+        original_analysis = pipeline.biomarker.run_analysis_phase
+
+        def fake_split(config) -> None:
+            call_order.append("split")
+            splits_dir = Path(str(config.splits_directory))
+            splits_dir.mkdir(parents=True, exist_ok=True)
+            (splits_dir / "toy_idx_0.pkl").write_bytes(b"split")
+
+        def fake_preselection(config) -> str:
+            call_order.append("preselection")
+            out_dir = Path(str(config.preselection_output_root))
+            (out_dir / "split_0" / "NP").mkdir(parents=True, exist_ok=True)
+            (out_dir / "split_0" / "DEG").mkdir(parents=True, exist_ok=True)
+            return str(out_dir)
+
+        def fake_train(config, *, device=None):
+            del device
+            call_order.append("training")
+            run_dir = Path(str(config.experiment_root)) / "train_runs" / "toy_config_run"
+            run_dir.mkdir(parents=True, exist_ok=True)
+            (run_dir / "best_checkpoint.pt").write_bytes(b"checkpoint")
+            return {
+                "output_dir": str(run_dir),
+                "best_checkpoint_path": str(run_dir / "best_checkpoint.pt"),
+            }
+
+        def fake_analysis(run_dir: str, *, config_path: str = "", output_dir: str = "", pathway_path: str = "", gpu_index=None):
+            analysis_calls.append((run_dir, config_path, output_dir, pathway_path, gpu_index))
+            call_order.append("analysis")
+            snapshot_payload = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
+            assert snapshot_payload["biomarker_pathway_gene_set_path"] == str(pathway_path_on_disk)
+            assert snapshot_payload["biomarker_min_pathway_size"] == 2
+            assert pathway_path == ""
+            analysis_dir = Path(output_dir)
+            analysis_dir.mkdir(parents=True, exist_ok=True)
+            return {
+                "run_dir": run_dir,
+                "output_dir": str(analysis_dir),
+                "dataset": "toy",
+            }
+
+        pathway_path_on_disk = pathway_path.resolve()
+
+        pipeline.split_dataset.run_split_generation = fake_split
+        pipeline.preselection.run_split_preselection = fake_preselection
+        pipeline.train.run_training_phase = fake_train
+        pipeline.biomarker.run_analysis_phase = fake_analysis
+        try:
+            result = pipeline.run_pipeline(
+                config_path=str(config_path),
+                device="cpu",
+                gpu_index=-1,
+            )
+            assert result.phases_completed == ("split", "preselection", "training", "analysis")
+            assert call_order == ["split", "preselection", "training", "analysis"]
+            assert len(analysis_calls) == 1
+            snapshot_payload = yaml.safe_load(Path(result.config_snapshot_path).read_text(encoding="utf-8"))
+            assert snapshot_payload["biomarker_pathway_gene_set_path"] == str(pathway_path_on_disk)
+            assert snapshot_payload["biomarker_min_pathway_size"] == 2
+        finally:
+            pipeline.split_dataset.run_split_generation = original_split
+            pipeline.preselection.run_split_preselection = original_preselection
+            pipeline.train.run_training_phase = original_train
+            pipeline.biomarker.run_analysis_phase = original_analysis
+
+
 def main() -> None:
     test_pipeline_endpoints_exist()
     test_run_pipeline_full_train_only_and_analysis_only()
+    test_run_pipeline_config_file_preserves_biomarker_settings()
     print_success("pipeline endpoints")
 
 

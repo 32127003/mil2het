@@ -2069,6 +2069,13 @@ def _write_run_recovery_artifacts(
     save_json(str(artifacts["metadata_path"]), metadata_payload)
 
 
+def _absolute_path_text(path_value: object) -> str:
+    text = str(path_value).strip()
+    if text == "":
+        return ""
+    return str(Path(text).expanduser().resolve())
+
+
 def build_dataloader_kwargs(config: SimpleNamespace, device: torch.device) -> Dict[str, object]:
     kwargs: Dict[str, object] = {
         "batch_size": int(config.batch_size),
@@ -2755,15 +2762,15 @@ def run_training_phase(config, *, device=None):
     run_config_payload = {
         "timestamp": datetime.now().isoformat(),
         "resolved_paths": {
-            "adata_path": str(adata_path),
-            "adata_directory": str(config.adata_directory),
-            "output_root": str(output_root_value),
-            "experiment_root": str(config.experiment_root),
-            "splits_directory": str(config.splits_directory),
-            "preselection_output_root": str(getattr(config, "preselection_output_root", "") or ""),
-            "preselection_root": str(preselection_root),
-            "ppi_path": str(config.ppi_path),
-            "run_dir": str(artifacts["output_dir"]),
+            "adata_path": _absolute_path_text(adata_path),
+            "adata_directory": _absolute_path_text(config.adata_directory),
+            "output_root": _absolute_path_text(output_root_value),
+            "experiment_root": _absolute_path_text(config.experiment_root),
+            "splits_directory": _absolute_path_text(config.splits_directory),
+            "preselection_output_root": _absolute_path_text(getattr(config, "preselection_output_root", "") or ""),
+            "preselection_root": _absolute_path_text(preselection_root),
+            "ppi_path": _absolute_path_text(config.ppi_path),
+            "run_dir": _absolute_path_text(artifacts["output_dir"]),
         },
         "config": dict(config.__dict__),
     }

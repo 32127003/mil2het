@@ -286,6 +286,25 @@ def resolve_path_with_base_dirs(
     return candidates[0]
 
 
+def resolve_explicit_runtime_path(
+    path_value: str,
+    *,
+    prefer_existing: bool,
+    base_dirs: Sequence[str],
+) -> str:
+    text = str(path_value).strip()
+    if text == "":
+        return text
+    if os.path.isabs(text):
+        return os.path.abspath(text)
+
+    cwd_candidate = os.path.abspath(text)
+    if not prefer_existing or os.path.exists(cwd_candidate):
+        return cwd_candidate
+
+    return resolve_path_with_base_dirs(base_dirs, text, prefer_existing=prefer_existing)
+
+
 def resolve_device(gpu_index: Optional[int], config: SimpleNamespace) -> torch.device:
     if gpu_index is not None:
         requested = int(gpu_index)
@@ -1364,9 +1383,16 @@ def run_analysis_phase(
     # Ensure binary label lists exist (train_new/biomarker expect plural forms).
     ensure_binary_label_lists(config)
 
+    output_dir_cli = str(output_dir).strip()
     output_dir_cfg = str(getattr(config, "biomarker_output_dir", "")).strip()
-    output_dir_value = str(output_dir).strip() or output_dir_cfg or os.path.join(run_dir, "biomarker")
-    if not os.path.isabs(output_dir_value):
+    output_dir_value = output_dir_cli or output_dir_cfg or os.path.join(run_dir, "biomarker")
+    if output_dir_cli != "":
+        output_dir = resolve_explicit_runtime_path(
+            output_dir_cli,
+            prefer_existing=False,
+            base_dirs=config_resolution_base_dirs,
+        )
+    elif not os.path.isabs(output_dir_value):
         output_dir = resolve_path_with_base_dirs(
             config_resolution_base_dirs,
             output_dir_value,
@@ -1376,15 +1402,22 @@ def run_analysis_phase(
         output_dir = os.path.abspath(output_dir_value)
     os.makedirs(output_dir, exist_ok=True)
 
+    pathway_path_cli = str(pathway_path).strip()
     pathway_path_cfg = str(
         getattr(config, "biomarker_pathway_gene_set_path", getattr(config, "pathway_gene_set_path", ""))
     ).strip()
-    pathway_path_value = str(pathway_path).strip() or pathway_path_cfg
+    pathway_path_value = pathway_path_cli or pathway_path_cfg
     if pathway_path_value == "":
         raise ValueError(
             "Pathway file must be provided via pathway_path or config.biomarker_pathway_gene_set_path"
         )
-    if not os.path.isabs(pathway_path_value):
+    if pathway_path_cli != "":
+        pathway_path = resolve_explicit_runtime_path(
+            pathway_path_cli,
+            prefer_existing=True,
+            base_dirs=config_resolution_base_dirs,
+        )
+    elif not os.path.isabs(pathway_path_value):
         pathway_path = resolve_path_with_base_dirs(
             config_resolution_base_dirs,
             pathway_path_value,
