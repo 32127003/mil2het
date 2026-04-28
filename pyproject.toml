@@ -40,7 +40,12 @@ exclude = ["data*", "experiment_asthma_find*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-python_files = ["smoke_test_*.py"]
+python_files = ["smoke_test_*.py", "test_*.py"]
 markers = [
+  "unit: fast contract or helper tests",
+  "integration: exercises multiple workflow phases",
+  "slow: long-running training, analysis, or signal-recovery tests",
   "gpu: requires actual CUDA execution and is skipped when --cpu-only is used",
+  "signal: validates recovery of planted synthetic biology signal",
+  "negative: expected fail-fast contract tests",
 ]
