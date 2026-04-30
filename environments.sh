@@ -5,7 +5,7 @@ pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -
 pip install torch-geometric
 pip install scikit-learn==1.7.2 umap-learn==0.5.11 pynndescent==0.6.0
 pip install anndata==0.9.2 h5py==3.10.0 scanpy==1.9.6
-pip install tqdm==4.66.1 ipykernel==6.29.3
+pip install ipykernel==6.29.3
 pip install esm==3.2.1.post1
 pip install "accelerate>=0.32,<2"
 pip install httpx

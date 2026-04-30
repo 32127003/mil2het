@@ -29,11 +29,6 @@ import torch
 import torch.nn as nn
 from scipy import sparse
 from scipy.stats import spearmanr
-try:
-    from tqdm import tqdm
-except Exception:  # pragma: no cover
-    def tqdm(iterable, **kwargs):  # type: ignore[misc]
-        return iterable
 
 MODULE_DIR = os.path.abspath(os.path.dirname(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(MODULE_DIR, ".."))
@@ -44,6 +39,7 @@ if PROJECT_ROOT not in sys.path:
 
 from CellEncoder import GraphCellEncoder, TransformerConvCellEncoder
 from MultipleInstanceLearning import PatientMILAggregator
+from mil2het.config import dict_to_namespace, load_workflow_config_dict
 from utils import *
 
 
@@ -115,6 +111,12 @@ def load_config(
     config_path: str,
     dataset_hint: Optional[str] = None,
 ) -> Tuple[SimpleNamespace, Dict[str, object]]:
+    if str(config_path).lower().endswith((".yaml", ".yml")):
+        config_dict = load_workflow_config_dict(config_path=config_path)
+        if str(config_dict.get("dataset", "")).strip() == "" and dataset_hint is not None:
+            config_dict["dataset"] = str(dataset_hint)
+        return dict_to_namespace(config_dict), dict(config_dict)
+
     module_name = os.path.splitext(os.path.basename(config_path))[0]
     spec = importlib.util.spec_from_file_location(module_name, config_path)
     if spec is None or spec.loader is None:
@@ -131,6 +133,12 @@ def load_config_like_train_from_run_snapshot(
     dataset_hint: Optional[str] = None,
 ) -> Tuple[SimpleNamespace, Dict[str, object]]:
     """Load run snapshot config with the same dataset->dict pattern as train.py."""
+    if str(config_path).lower().endswith((".yaml", ".yml")):
+        config_dict = load_workflow_config_dict(config_path=config_path)
+        if str(config_dict.get("dataset", "")).strip() == "" and dataset_hint is not None:
+            config_dict["dataset"] = str(dataset_hint)
+        return dict_to_namespace(config_dict), dict(config_dict)
+
     dataset_value = str(dataset_hint).strip().lower() if dataset_hint is not None else ""
     module_name = os.path.splitext(os.path.basename(config_path))[0]
     spec = importlib.util.spec_from_file_location(module_name, config_path)
@@ -190,14 +198,28 @@ def infer_split_number_from_run_dir(run_dir: str) -> Optional[int]:
 def locate_run_snapshot_config_path(run_dir: str, cli_config: str = "") -> str:
     cli_text = str(cli_config).strip()
     if cli_text != "":
-        config_candidate = (
-            cli_text if os.path.isabs(cli_text) else os.path.abspath(os.path.join(run_dir, cli_text))
+        if os.path.isabs(cli_text):
+            config_candidates = [os.path.abspath(cli_text)]
+        else:
+            config_candidates = [
+                os.path.abspath(cli_text),
+                os.path.abspath(os.path.join(run_dir, cli_text)),
+            ]
+        for config_candidate in config_candidates:
+            if os.path.isfile(config_candidate):
+                return config_candidate
+        if len(config_candidates) == 1:
+            raise FileNotFoundError(f"Config file not found: {config_candidates[0]}")
+        raise FileNotFoundError(
+            "Config file not found. "
+            f"Tried current working directory path {config_candidates[0]} "
+            f"and run_dir-relative path {config_candidates[1]}."
         )
-        if not os.path.isfile(config_candidate):
-            raise FileNotFoundError(f"Config file not found: {config_candidate}")
-        return config_candidate
 
-    candidates = [os.path.join(run_dir, "asthma_config.py")]
+    candidates = [
+        os.path.join(run_dir, "workflow_config.yaml"),
+        os.path.join(run_dir, "asthma_config.py"),
+    ]
     candidates.extend(
         sorted(
             os.path.join(run_dir, file_name)
@@ -215,8 +237,8 @@ def locate_run_snapshot_config_path(run_dir: str, cli_config: str = "") -> str:
             return normalized
 
     raise FileNotFoundError(
-        "No config snapshot (*.py) found in run_dir. "
-        "Expected run_dir/asthma_config.py or another *_config.py."
+        "No config snapshot found in run_dir. "
+        "Expected run_dir/workflow_config.yaml, run_dir/asthma_config.py, or another *_config.py."
     )
 
 
@@ -262,6 +284,25 @@ def resolve_path_with_base_dirs(
     if len(candidates) == 0:
         return os.path.abspath(text)
     return candidates[0]
+
+
+def resolve_explicit_runtime_path(
+    path_value: str,
+    *,
+    prefer_existing: bool,
+    base_dirs: Sequence[str],
+) -> str:
+    text = str(path_value).strip()
+    if text == "":
+        return text
+    if os.path.isabs(text):
+        return os.path.abspath(text)
+
+    cwd_candidate = os.path.abspath(text)
+    if not prefer_existing or os.path.exists(cwd_candidate):
+        return cwd_candidate
+
+    return resolve_path_with_base_dirs(base_dirs, text, prefer_existing=prefer_existing)
 
 
 def resolve_device(gpu_index: Optional[int], config: SimpleNamespace) -> torch.device:
@@ -512,9 +553,7 @@ def load_prior_embeddings_by_view(
     view_names: Sequence[str],
     config: SimpleNamespace,
 ) -> Dict[str, torch.Tensor]:
-    configured_paths = getattr(config, "protein_embedding_paths", None)
-    if not isinstance(configured_paths, dict):
-        configured_paths = None
+    configured_paths = _normalized_configured_embedding_paths(config)
 
     loaded: Dict[str, torch.Tensor] = {}
     for view_name in [str(name).strip() for name in list(view_names) if str(name).strip()]:
@@ -536,32 +575,16 @@ def _build_embedding_matrix_with_missing_fallback(
     source_name: str,
 ) -> Tuple[torch.Tensor, List[str]]:
     missing = [str(gene) for gene in genes if str(gene) not in embedding_dict]
-    if len(missing) == 0:
-        return build_embedding_matrix(genes, embedding_dict), []
-
     if len(embedding_dict) == 0:
         raise ValueError(
             f"Protein embedding source '{source_name}' is empty; cannot infer embedding dimension."
         )
-
-    sample_vector = next(iter(embedding_dict.values()))
-    embedding_dimension = int(np.asarray(sample_vector, dtype=np.float32).reshape(-1).shape[0])
-    if embedding_dimension <= 0:
+    if len(missing) > 0:
         raise ValueError(
-            f"Protein embedding source '{source_name}' has invalid vector dimension: {embedding_dimension}"
+            f"Protein embedding source '{source_name}' is missing {len(missing)} required genes "
+            f"(e.g. {missing[:5]}). Align the embedding gene identifiers with the selected gene set."
         )
-
-    patched_embedding_dict = dict(embedding_dict)
-    zero_vector = np.zeros((embedding_dimension,), dtype=np.float32)
-    for gene_name in missing:
-        patched_embedding_dict[gene_name] = zero_vector
-
-    print(
-        f"[ProteinEmbedding][warn] source={source_name} missing={len(missing)} "
-        f"(e.g., {missing[:5]}); filled with zeros.",
-        flush=True,
-    )
-    return build_embedding_matrix(genes, patched_embedding_dict), missing
+    return build_embedding_matrix(genes, embedding_dict), []
 
 
 def normalize_embedding_dict(embedding_object) -> Dict[str, np.ndarray]:
@@ -631,7 +654,39 @@ def _canonical_embedding_source_name(source_name: str) -> str:
         return "GPT"
     if normalized in {"node2vec", "n2v"}:
         return "node2vec"
-    raise ValueError(f"Unknown embedding source name: {source_name!r}")
+    return str(source_name).strip()
+
+
+def _normalized_configured_embedding_paths(config: SimpleNamespace) -> Optional[Dict[str, str]]:
+    for attribute_name in ("protein_embedding_paths", "gene_embedding_views", "embedding_views"):
+        configured_paths_raw = getattr(config, attribute_name, None)
+        if isinstance(configured_paths_raw, argparse.Namespace):
+            configured_paths_raw = vars(configured_paths_raw)
+        if not isinstance(configured_paths_raw, dict) or len(configured_paths_raw) <= 0:
+            continue
+        return {str(key): str(value) for key, value in configured_paths_raw.items()}
+    return None
+
+
+def _resolve_embedding_view_sources(config: SimpleNamespace) -> List[str]:
+    configured_paths = _normalized_configured_embedding_paths(config)
+    candidate_sources: List[str] = []
+
+    for attribute_name in ("prior_view_sources", "protein_embedding_sources"):
+        raw_values = getattr(config, attribute_name, [])
+        if isinstance(raw_values, str):
+            raw_values = [raw_values]
+        for raw_value in list(raw_values or []):
+            text = str(raw_value).strip()
+            if text != "":
+                candidate_sources.append(text)
+
+    if isinstance(configured_paths, dict):
+        candidate_sources.extend(str(name) for name in configured_paths.keys())
+
+    return _deduplicate_preserve_order(
+        [_canonical_embedding_source_name(source_name) for source_name in candidate_sources]
+    )
 
 
 def _select_genes_with_embedding_coverage(
@@ -805,14 +860,12 @@ def build_protein_embedding_matrix(
             f"Got: {str(getattr(config, 'protein_embedding_choice', choice))!r}"
         )
 
-    configured_paths = getattr(config, "protein_embedding_paths", None)
-    if not isinstance(configured_paths, dict):
-        configured_paths = None
-
-    sources = [str(name).strip() for name in list(getattr(config, "protein_embedding_sources", [])) if str(name).strip()]
+    configured_paths = _normalized_configured_embedding_paths(config)
+    sources = _resolve_embedding_view_sources(config)
     if len(sources) == 0:
         raise ValueError(
-            "protein_embedding_sources must be non-empty, e.g. ['GPT', 'node2vec', 'ESM3']."
+            "At least one embedding view is required. "
+            "Set gene_embedding_views/protein_embedding_paths or prior_view_sources."
         )
     source_matrices: List[torch.Tensor] = []
     for source_name in sources:
@@ -1260,9 +1313,15 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
-    args = parse_args()
-    run_dir = os.path.abspath(str(args.run_dir).strip())
+def run_analysis_phase(
+    run_dir: str,
+    *,
+    config_path: str = "",
+    output_dir: str = "",
+    pathway_path: str = "",
+    gpu_index: int | None = None,
+) -> Dict[str, object]:
+    run_dir = os.path.abspath(str(run_dir).strip())
     if not os.path.isdir(run_dir):
         raise FileNotFoundError(f"run_dir not found: {run_dir}")
 
@@ -1274,10 +1333,13 @@ def main() -> None:
         if dataset_value is not None and str(dataset_value).strip() != "":
             dataset_hint = str(dataset_value).strip()
 
-    config_path = locate_run_snapshot_config_path(run_dir=run_dir, cli_config=str(args.config))
-    config, config_dict = load_config_like_train_from_run_snapshot(config_path, dataset_hint=dataset_hint)
+    resolved_config_path = locate_run_snapshot_config_path(run_dir=run_dir, cli_config=str(config_path))
+    config, config_dict = load_config_like_train_from_run_snapshot(
+        resolved_config_path,
+        dataset_hint=dataset_hint,
+    )
 
-    config_resolution_base_dirs = build_resolution_base_dirs(config_path=config_path, run_dir=run_dir)
+    config_resolution_base_dirs = build_resolution_base_dirs(config_path=resolved_config_path, run_dir=run_dir)
 
     # If the run directory contains run_config.json (train_new output), use it to fill in
     # missing dataset/split info and to override stale relative paths. This does NOT
@@ -1321,32 +1383,50 @@ def main() -> None:
     # Ensure binary label lists exist (train_new/biomarker expect plural forms).
     ensure_binary_label_lists(config)
 
+    output_dir_cli = str(output_dir).strip()
     output_dir_cfg = str(getattr(config, "biomarker_output_dir", "")).strip()
-    output_dir = str(args.out_dir).strip() or output_dir_cfg or os.path.join(run_dir, "biomarker")
-    if not os.path.isabs(output_dir):
+    output_dir_value = output_dir_cli or output_dir_cfg or os.path.join(run_dir, "biomarker")
+    if output_dir_cli != "":
+        output_dir = resolve_explicit_runtime_path(
+            output_dir_cli,
+            prefer_existing=False,
+            base_dirs=config_resolution_base_dirs,
+        )
+    elif not os.path.isabs(output_dir_value):
         output_dir = resolve_path_with_base_dirs(
             config_resolution_base_dirs,
-            output_dir,
+            output_dir_value,
             prefer_existing=False,
         )
+    else:
+        output_dir = os.path.abspath(output_dir_value)
     os.makedirs(output_dir, exist_ok=True)
 
+    pathway_path_cli = str(pathway_path).strip()
     pathway_path_cfg = str(
         getattr(config, "biomarker_pathway_gene_set_path", getattr(config, "pathway_gene_set_path", ""))
     ).strip()
-    pathway_path = str(args.pathway_path).strip() or pathway_path_cfg
-    if pathway_path == "":
+    pathway_path_value = pathway_path_cli or pathway_path_cfg
+    if pathway_path_value == "":
         raise ValueError(
-            "Pathway file must be provided via --pathway_path or config.biomarker_pathway_gene_set_path"
+            "Pathway file must be provided via pathway_path or config.biomarker_pathway_gene_set_path"
         )
-    if not os.path.isabs(pathway_path):
+    if pathway_path_cli != "":
+        pathway_path = resolve_explicit_runtime_path(
+            pathway_path_cli,
+            prefer_existing=True,
+            base_dirs=config_resolution_base_dirs,
+        )
+    elif not os.path.isabs(pathway_path_value):
         pathway_path = resolve_path_with_base_dirs(
             config_resolution_base_dirs,
-            pathway_path,
+            pathway_path_value,
             prefer_existing=True,
         )
+    else:
+        pathway_path = os.path.abspath(pathway_path_value)
 
-    device = resolve_device(args.gpu, config)
+    device = resolve_device(gpu_index, config)
     print(f"[Runtime] device={device}", flush=True)
 
     seed = int(getattr(config, "biomarker_random_seed", getattr(config, "seed", 0)))
@@ -1414,23 +1494,14 @@ def main() -> None:
     patient_mapping, patient_array = create_category_mapping(patient_values)
     patient_index_to_id = {int(index): str(name) for name, index in patient_mapping.items()}
 
-    prior_view_sources = [
-        str(name).strip()
-        for name in list(getattr(config, "prior_view_sources", []))
-        if str(name).strip()
-    ]
+    prior_view_sources = _resolve_embedding_view_sources(config)
     if len(prior_view_sources) == 0:
-        prior_view_sources = [
-            str(name).strip()
-            for name in list(getattr(config, "protein_embedding_sources", []))
-            if str(name).strip()
-        ]
-    if len(prior_view_sources) == 0:
-        raise ValueError("prior_view_sources must be non-empty for model reconstruction.")
+        raise ValueError(
+            "At least one embedding view is required for model reconstruction. "
+            "Set gene_embedding_views/protein_embedding_paths or prior_view_sources."
+        )
 
-    configured_embedding_paths = getattr(config, "protein_embedding_paths", None)
-    if not isinstance(configured_embedding_paths, dict):
-        configured_embedding_paths = None
+    configured_embedding_paths = _normalized_configured_embedding_paths(config)
 
     preselection_root = resolve_preselection_root(config)
     print(
@@ -2401,7 +2472,7 @@ def main() -> None:
                 handle.flush()
 
     metadata_out = {
-        "config_path": config_path,
+        "config_path": resolved_config_path,
         "run_dir": run_dir,
         "output_dir": output_dir,
         "dataset": str(config.dataset),
@@ -2457,6 +2528,19 @@ def main() -> None:
         "celltype_gene_biomarker.tsv, gene_ranking_stability.tsv, pathway_ranking_stability.tsv, "
         "final_biomarker.tsv, final_biomarker_stability.tsv",
         flush=True,
+    )
+
+    return metadata_out
+
+
+def main() -> None:
+    args = parse_args()
+    run_analysis_phase(
+        args.run_dir,
+        config_path=str(args.config),
+        output_dir=str(args.out_dir),
+        pathway_path=str(args.pathway_path),
+        gpu_index=args.gpu,
     )
 
 

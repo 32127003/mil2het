@@ -42,7 +42,6 @@ from scipy import sparse
 from torch import autocast as torch_autocast
 from torch.cuda.amp import GradScaler
 from torch.utils.data import DataLoader, Dataset
-from tqdm import tqdm
 
 def autocast_cuda(enabled: bool):
     if not bool(enabled):
@@ -851,7 +850,13 @@ def check_embedding_coverage(
 
     return selected[:target_k]
 
-def load_k_np_genes(dataset: str, k: int, preselection_root: Optional[str] = None) -> Tuple[List[str], List[str]]:
+def load_k_np_genes(
+    dataset: str,
+    k: int,
+    preselection_root: Optional[str] = None,
+    required_embedding_sources: Optional[Sequence[str]] = None,
+    embedding_paths: Optional[Dict[str, str]] = None,
+) -> Tuple[List[str], List[str]]:
     base_root = str(preselection_root) if preselection_root is not None else os.path.join(PROJECT_ROOT, "data", str(dataset))
     np_path = os.path.join(base_root, "NP", "NP_max.tsv")
     if not os.path.isfile(np_path):
@@ -871,16 +876,82 @@ def load_k_np_genes(dataset: str, k: int, preselection_root: Optional[str] = Non
         )
         return genes, genes
 
+    required_sources = [str(name).strip() for name in list(required_embedding_sources or []) if str(name).strip()]
+    if len(required_sources) == 0:
+        return genes[:target_k], genes
+
     selected = check_embedding_coverage(
         ranked_genes=genes,
         target_k=target_k,
-        required_sources=["ESM3", "GPT", "node2vec"],
-        embedding_paths=None,
-        force_fill_unmatched=False,  # 보통은 False 권장 (coverage 만족하는 것만 고르기)
-
+        required_sources=required_sources,
+        embedding_paths=embedding_paths,
+        force_fill_unmatched=False,
     )
+    if len(selected) == 0:
+        raise ValueError(
+            "No genes remained after embedding-coverage filtering. "
+            f"required_sources={required_sources}"
+        )
 
     return selected, genes
+
+
+def _candidate_training_preselection_roots(root_path: str, split_number: int, split_subdir: str) -> List[str]:
+    normalized_root = str(root_path).strip()
+    if normalized_root == "":
+        return []
+
+    normalized_basename = os.path.basename(os.path.normpath(normalized_root))
+    if normalized_basename.startswith("split_"):
+        return [normalized_root]
+    if normalized_basename == split_subdir:
+        return [
+            os.path.join(normalized_root, f"split_idx_{split_number}"),
+            os.path.join(normalized_root, f"split_{split_number}"),
+            normalized_root,
+        ]
+    return [
+        os.path.join(normalized_root, f"split_{split_number}"),
+        os.path.join(normalized_root, split_subdir, f"split_idx_{split_number}"),
+        os.path.join(normalized_root, split_subdir, f"split_{split_number}"),
+        normalized_root,
+    ]
+
+
+def resolve_training_preselection_root(config: SimpleNamespace) -> str:
+    split_number = int(getattr(config, "split_number", 0))
+    split_subdir = sanitize_filename_component(
+        str(getattr(config, "split_preselection_subdir", "split_preselection"))
+    )
+    dataset_root = os.path.join(PROJECT_ROOT, "data", str(config.dataset))
+
+    configured_root_candidates = [
+        str(getattr(config, "preselection_root", "") or "").strip(),
+        str(getattr(config, "preselection_output_root", "") or "").strip(),
+        os.path.join(dataset_root, "preselection"),
+        os.path.join(dataset_root, split_subdir),
+    ]
+
+    candidates: List[str] = []
+    for root_path in configured_root_candidates:
+        for candidate in _candidate_training_preselection_roots(
+            root_path=root_path,
+            split_number=split_number,
+            split_subdir=split_subdir,
+        ):
+            if candidate not in candidates:
+                candidates.append(candidate)
+
+    for candidate in candidates:
+        if not os.path.isdir(candidate):
+            continue
+        if os.path.isdir(os.path.join(candidate, "NP")) or os.path.isdir(os.path.join(candidate, "DEG")):
+            return str(candidate)
+
+    raise FileNotFoundError(
+        "split-specific preselection directory not found. "
+        f"Tried: {candidates}. Run modules/preselection.py first."
+    )
 
 def _embedding_source_path_for_logging(
     source_name: str,
@@ -897,12 +968,35 @@ def _embedding_source_path_for_logging(
 
 
 def _normalized_configured_embedding_paths(config: SimpleNamespace) -> Optional[Dict[str, str]]:
-    configured_paths_raw = config.protein_embedding_paths
-    if isinstance(configured_paths_raw, argparse.Namespace):
-        configured_paths_raw = vars(configured_paths_raw)
-    if not isinstance(configured_paths_raw, dict) or len(configured_paths_raw) <= 0:
-        return None
-    return {str(key): str(value) for key, value in configured_paths_raw.items()}
+    for attribute_name in ("protein_embedding_paths", "gene_embedding_views", "embedding_views"):
+        configured_paths_raw = getattr(config, attribute_name, None)
+        if isinstance(configured_paths_raw, argparse.Namespace):
+            configured_paths_raw = vars(configured_paths_raw)
+        if not isinstance(configured_paths_raw, dict) or len(configured_paths_raw) <= 0:
+            continue
+        return {str(key): str(value) for key, value in configured_paths_raw.items()}
+    return None
+
+
+def _resolve_embedding_view_sources(config: SimpleNamespace) -> List[str]:
+    configured_paths = _normalized_configured_embedding_paths(config)
+    candidate_sources: List[str] = []
+
+    for attribute_name in ("prior_view_sources", "protein_embedding_sources"):
+        raw_values = getattr(config, attribute_name, [])
+        if isinstance(raw_values, str):
+            raw_values = [raw_values]
+        for raw_value in list(raw_values or []):
+            text = str(raw_value).strip()
+            if text != "":
+                candidate_sources.append(text)
+
+    if isinstance(configured_paths, dict):
+        candidate_sources.extend(str(name) for name in configured_paths.keys())
+
+    return _deduplicate_preserve_order(
+        [_canonical_embedding_source_name(source_name) for source_name in candidate_sources]
+    )
 
 
 def _canonical_embedding_source_name(source_name: str) -> str:
@@ -1150,33 +1244,17 @@ def _build_embedding_matrix_with_missing_fallback(
     *,
     source_name: str,
 ) -> Tuple[torch.Tensor, List[str]]:
-    """Build embedding matrix while tolerating missing genes by zero-filling."""
     missing = [str(gene) for gene in genes if str(gene) not in embedding_dict]
-    if len(missing) == 0:
-        return build_embedding_matrix(genes, embedding_dict), []
-
     if len(embedding_dict) == 0:
         raise ValueError(
             f"Protein embedding source '{source_name}' is empty; cannot infer embedding dimension."
         )
-    sample_vector = next(iter(embedding_dict.values()))
-    embedding_dimension = int(np.asarray(sample_vector, dtype=np.float32).reshape(-1).shape[0])
-    if embedding_dimension <= 0:
+    if len(missing) > 0:
         raise ValueError(
-            f"Protein embedding source '{source_name}' has invalid vector dimension: {embedding_dimension}"
+            f"Protein embedding source '{source_name}' is missing {len(missing)} required genes "
+            f"(e.g. {missing[:5]}). Align the embedding gene identifiers with the selected gene set."
         )
-
-    patched_embedding_dict = dict(embedding_dict)
-    zero_vector = np.zeros((embedding_dimension,), dtype=np.float32)
-    for gene_name in missing:
-        patched_embedding_dict[gene_name] = zero_vector
-
-    print(
-        f"[ProteinEmbedding][warn] source={source_name} missing={len(missing)} "
-        f"(e.g., {missing[:5]}); filled with zeros.",
-        flush=True,
-    )
-    return build_embedding_matrix(genes, patched_embedding_dict), missing
+    return build_embedding_matrix(genes, embedding_dict), []
 
 
 def build_protein_embedding_matrix(
@@ -1199,10 +1277,11 @@ def build_protein_embedding_matrix(
 
     configured_paths = _normalized_configured_embedding_paths(config)
 
-    sources = [str(name).strip() for name in list(config.prior_view_sources) if str(name).strip()]
+    sources = _resolve_embedding_view_sources(config)
     if len(sources) == 0:
         raise ValueError(
-            "prior_view_sources must be non-empty, e.g. ['GPT', 'node2vec', 'ESM3']."
+            "At least one embedding view is required. "
+            "Set gene_embedding_views/protein_embedding_paths or prior_view_sources."
         )
     source_norm_mode = "l2"
     output_norm_mode = "layernorm"
@@ -1539,7 +1618,7 @@ def protein_embedding_source_paths_for_logging(
         return []
 
     configured_paths = _normalized_configured_embedding_paths(config)
-    sources = list(config.prior_view_sources)
+    sources = _resolve_embedding_view_sources(config)
     resolved_paths: List[str] = []
     for source_name in sources:
         path = _embedding_source_path_for_logging(str(source_name), configured_paths)
@@ -1968,6 +2047,8 @@ def build_experiment_directory(config):
     return {
         "output_dir": output_dir,
         "cache_dir": cache_dir,
+        "run_config_path": os.path.join(output_dir, "run_config.json"),
+        "metadata_path": os.path.join(output_dir, "metadata.json"),
         "history_path": os.path.join(output_dir, "history.csv"),
         "train_step_log_path": os.path.join(output_dir, "train_step_metrics.csv"),
         "val_step_log_path": os.path.join(output_dir, "val_step_metrics.csv"),
@@ -1977,6 +2058,22 @@ def build_experiment_directory(config):
         "last_checkpoint_path": os.path.join(output_dir, "last_checkpoint.pt"),
         "epoch5_checkpoint_path": os.path.join(output_dir, "epoch5_checkpoint.pt"),
     }
+
+
+def _write_run_recovery_artifacts(
+    artifacts: Dict[str, str],
+    run_config_payload: Dict[str, object],
+    metadata_payload: Dict[str, object],
+) -> None:
+    save_json(str(artifacts["run_config_path"]), run_config_payload)
+    save_json(str(artifacts["metadata_path"]), metadata_payload)
+
+
+def _absolute_path_text(path_value: object) -> str:
+    text = str(path_value).strip()
+    if text == "":
+        return ""
+    return str(Path(text).expanduser().resolve())
 
 
 def build_dataloader_kwargs(config: SimpleNamespace, device: torch.device) -> Dict[str, object]:
@@ -2589,69 +2686,39 @@ def build_optimizer(
 
 
 
-if __name__ == "__main__":
-
+def run_training_phase(config, *, device=None):
     ensure_cublas_workspace_config()
-    parser = argparse.ArgumentParser(description="Train scGOAT + MIL patient classifier")
-    parser.add_argument("--dataset", required=True, help="dataset name, e.g. asthma")
-    parser.add_argument("--seed", required=False, type=int, default=42, help="random seed for reproducibility")
-    parser.add_argument("--gpu", required=True, type=int, help="cuda device index")
-    parser.add_argument("--split-number", required=True, type=int, help="split index")
 
-
-    args = parser.parse_args()
-    args_dict = args.__dict__
-
-    if args.dataset == 'asthma':
-        args_dict.update(asthma_train_configuration)
-    elif args.dataset == 'asthma_ext':
-        args_dict.update(asthma_ext_train_configuration)    
-    elif args.dataset == 'vitiligo':
-        args_dict.update(vitiligo_train_configuration)
-    elif args.dataset == 'covid':
-        args_dict.update(covid_train_configuration)
-    else:
-        raise ValueError(
-            f"Unsupported dataset: {args.dataset}, custom split configuration is required for new datasets."
-        )
-    config = dict2namespace(args_dict)
-
-    print(config)
-    
-
-    if not torch.cuda.is_available():
-        raise RuntimeError("CUDA is required for this training script.")
-    print(f"{config.gpu}: datatype={type(config.gpu)} value={config.gpu}")
-    if int(config.gpu) < 0 or int(config.gpu) >= int(torch.cuda.device_count()):
-        raise ValueError(
-            f"gpu index {config.gpu} not in {int(torch.cuda.device_count())} visible CUDA devices."
-        )
-    if torch.cuda.is_available():
+    seed = int(getattr(config, "seed", 42))
+    if device is None:
+        if not torch.cuda.is_available():
+            raise RuntimeError("CUDA is required for this training script.")
+        print(f"{config.gpu}: datatype={type(config.gpu)} value={config.gpu}")
+        if int(config.gpu) < 0 or int(config.gpu) >= int(torch.cuda.device_count()):
+            raise ValueError(
+                f"gpu index {config.gpu} not in {int(torch.cuda.device_count())} visible CUDA devices."
+            )
         device = torch.device(f"cuda:{config.gpu}")
         torch.cuda.set_device(device)
+    else:
+        device = torch.device(device)
+        print(f"{device}: using provided device override", flush=True)
+
+    print(config)
     configure_runtime_backends(device=device, deterministic_training=bool(config.deterministic_training))
-    set_global_seed(int(args.seed), deterministic=bool(config.deterministic_training))
+    set_global_seed(seed, deterministic=bool(config.deterministic_training))
     if config.deterministic_algorithms:
         torch.use_deterministic_algorithms(True, warn_only=bool(config.deterministic_warn_only))
     artifacts = build_experiment_directory(config)
-   
-
-    run_config_payload = {
-        "timestamp": datetime.now().isoformat(),
-        "resolved_paths": {
-            "experiment_root": str(config.experiment_root),
-            "adata_directory": str(config.adata_directory),
-            "ppi_path": str(config.ppi_path),
-            "splits_directory": str(config.splits_directory),
-        },
-        "config": config.__dict__,
-    }
     config_module_file = os.path.join(PROJECT_ROOT, "configs", f"config.py")
     shutil.copy2(config_module_file, os.path.join(artifacts["output_dir"], os.path.basename(config_module_file)))
     
 
-    print(f"Loading adata: {config.adata_directory}/{config.dataset}_data.h5ad", flush=True)
-    adata = sc.read_h5ad(str(config.adata_directory) +f"/{config.dataset}" + f"/{config.dataset}_data.h5ad")
+    adata_path = str(getattr(config, "adata_path", "") or getattr(config, "input_h5ad", "") or "").strip()
+    if adata_path == "":
+        adata_path = str(config.adata_directory) + f"/{config.dataset}" + f"/{config.dataset}_data.h5ad"
+    print(f"Loading adata: {adata_path}", flush=True)
+    adata = sc.read_h5ad(str(adata_path))
 
     if config.treatment_column is not None and str(config.treatment_column).strip() != "":
         treatment_column = str(config.treatment_column)
@@ -2685,9 +2752,38 @@ if __name__ == "__main__":
     patient_index_to_name = {int(index): str(name) for name, index in patient_mapping.items()}
 
     print("loading preselection data...", flush=True)
-    preselection_root = os.path.join(PROJECT_ROOT,"data", config.dataset, "preselection", f"split_{int(config.split_number)}",)
-    if not os.path.isdir(preselection_root):
-        raise FileNotFoundError(f"split-specific preselection directory not found: {preselection_root}. Run modules/preselection.py first.")
+    preselection_root = resolve_training_preselection_root(config)
+    config.preselection_root = str(preselection_root)
+    setattr(config, "run_dir", str(artifacts["output_dir"]))
+
+    output_root_value = str(getattr(config, "output_root", "") or "").strip()
+    if output_root_value == "":
+        output_root_value = str(Path(str(config.experiment_root)).resolve().parent)
+    run_config_payload = {
+        "timestamp": datetime.now().isoformat(),
+        "resolved_paths": {
+            "adata_path": _absolute_path_text(adata_path),
+            "adata_directory": _absolute_path_text(config.adata_directory),
+            "output_root": _absolute_path_text(output_root_value),
+            "experiment_root": _absolute_path_text(config.experiment_root),
+            "splits_directory": _absolute_path_text(config.splits_directory),
+            "preselection_output_root": _absolute_path_text(getattr(config, "preselection_output_root", "") or ""),
+            "preselection_root": _absolute_path_text(preselection_root),
+            "ppi_path": _absolute_path_text(config.ppi_path),
+            "run_dir": _absolute_path_text(artifacts["output_dir"]),
+        },
+        "config": dict(config.__dict__),
+    }
+    metadata_payload = {
+        "label_mapping": {str(key): int(value) for key, value in label_mapping.items()},
+        "celltype_mapping": {str(key): int(value) for key, value in celltype_mapping.items()},
+        "treatment_mapping": {str(key): int(value) for key, value in treatment_mapping.items()},
+    }
+    _write_run_recovery_artifacts(
+        artifacts=artifacts,
+        run_config_payload=run_config_payload,
+        metadata_payload=metadata_payload,
+    )
 
 
     np_source_path = os.path.join(preselection_root, "NP", "NP_max.tsv")
@@ -2699,10 +2795,21 @@ if __name__ == "__main__":
     print("[Preselection] " f"split={int(config.split_number)} "f"NP={np_source_path} "f"DEG_dir={deg_source_dir} "
     f"DEG_zscore={deg_zscore_source_path} "f"zscore_standardize={zscore_standardize} "f"zscore_clip=[{zscore_clip_min},{zscore_clip_max}]", flush=True,)
 
-    genes, maximum_genes = load_k_np_genes(config.dataset, config.k, preselection_root=preselection_root)
+    required_embedding_sources = _resolve_embedding_view_sources(config)
+    if len(required_embedding_sources) == 0:
+        raise ValueError(
+            "At least one embedding view is required for FIND prior interface. "
+            "Set gene_embedding_views/protein_embedding_paths or prior_view_sources."
+        )
+    configured_embedding_paths = _normalized_configured_embedding_paths(config)
+    genes, maximum_genes = load_k_np_genes(
+        config.dataset,
+        config.k,
+        preselection_root=preselection_root,
+        required_embedding_sources=required_embedding_sources,
+        embedding_paths=configured_embedding_paths,
+    )
     print(f"Loaded preselected {len(genes)} genes from gene space (maximum {len(maximum_genes)})", flush=True)
-    required_embedding_sources: List[str] = [str(name) for name in list(config.prior_view_sources)]
-    
     print(f"Loaded {len(genes)} genes after embedding coverage check", flush=True)
     gene_indices = map_genes_to_adata(adata, genes)
     expression_matrix = adata[:, gene_indices].X
@@ -2724,9 +2831,7 @@ if __name__ == "__main__":
         flush=True,
     )
 
-    prior_view_sources = [str(name).strip() for name in list(config.prior_view_sources) if str(name).strip()]
-    if len(prior_view_sources) == 0:
-        raise ValueError("prior_view_sources must be non-empty for FIND prior interface.")
+    prior_view_sources = list(required_embedding_sources)
     prior_embeddings_by_view = load_prior_embeddings_by_view(
         genes=genes,
         view_names=prior_view_sources,
@@ -3052,9 +3157,9 @@ if __name__ == "__main__":
     else:
         print("MIDAM-lite: disabled", flush=True)
 
-    train_seed_anchor = int(args.seed) * 1000003 + 11
-    val_seed_anchor = int(args.seed) * 1000003 + 23
-    test_seed_anchor = int(args.seed) * 1000003 + 37
+    train_seed_anchor = int(seed) * 1000003 + 11
+    val_seed_anchor = int(seed) * 1000003 + 23
+    test_seed_anchor = int(seed) * 1000003 + 37
 
     node_feature_beta_value = float(config.node_feature_beta)
     cell_encoder.set_node_feature_beta(float(node_feature_beta_value))
@@ -3668,3 +3773,47 @@ if __name__ == "__main__":
         "mil_top_cells_{val,test}.csv, best_model.pt",
         flush=True,
     )
+
+    return artifacts
+
+
+def build_train_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Train scGOAT + MIL patient classifier")
+    parser.add_argument("--dataset", required=True, help="dataset name, e.g. asthma")
+    parser.add_argument("--seed", required=False, type=int, default=42, help="random seed for reproducibility")
+    parser.add_argument("--gpu", required=True, type=int, help="cuda device index")
+    parser.add_argument("--split-number", required=True, type=int, help="split index")
+    return parser
+
+
+def build_train_config_from_cli_args(args):
+    args_dict = args.__dict__
+
+    if args.dataset == "asthma":
+        args_dict.update(asthma_train_configuration)
+    elif args.dataset == "asthma_ext":
+        args_dict.update(asthma_ext_train_configuration)
+    elif args.dataset == "vitiligo":
+        args_dict.update(vitiligo_train_configuration)
+    elif args.dataset == "covid":
+        args_dict.update(covid_train_configuration)
+    else:
+        raise ValueError(
+            f"Unsupported dataset: {args.dataset}, custom split configuration is required for new datasets."
+        )
+    return dict2namespace(args_dict)
+
+
+def load_train_config_from_cli(argv: Optional[Sequence[str]] = None):
+    parser = build_train_arg_parser()
+    args = parser.parse_args(argv)
+    return build_train_config_from_cli_args(args)
+
+
+def main() -> None:
+    config = load_train_config_from_cli()
+    run_training_phase(config)
+
+
+if __name__ == "__main__":
+    main()

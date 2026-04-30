@@ -11,7 +11,7 @@ import pickle
 import random
 from collections import Counter
 from types import SimpleNamespace
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -25,11 +25,57 @@ from sklearn.metrics import (
     precision_recall_fscore_support,
     roc_auc_score,
 )
-from tqdm import tqdm
+
+from mil2het.config import dict_to_namespace, load_workflow_config_dict
 
 MODULE_ROOT = os.path.abspath(os.path.dirname(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(MODULE_ROOT, ".."))
 DATA_ROOT = os.path.join(PROJECT_ROOT, "data")
+
+_tqdm_impl = None
+_tqdm_import_attempted = False
+
+
+class _TqdmFallback:
+    def __init__(self, iterable=None, **kwargs) -> None:
+        self.iterable = iterable
+        self.kwargs = kwargs
+
+    def __iter__(self) -> Iterator:
+        if self.iterable is None:
+            return iter(())
+        return iter(self.iterable)
+
+    def update(self, n: int = 1) -> None:
+        _ = n
+
+    def set_postfix(self, *args, **kwargs) -> None:
+        _ = args, kwargs
+
+    def close(self) -> None:
+        return None
+
+
+def _resolve_tqdm():
+    global _tqdm_impl, _tqdm_import_attempted
+    if not _tqdm_import_attempted:
+        try:
+            from tqdm import tqdm as _real_tqdm
+        except Exception:
+            _tqdm_impl = None
+        else:
+            _tqdm_impl = _real_tqdm
+        _tqdm_import_attempted = True
+    return _tqdm_impl
+
+
+def tqdm(iterable=None, **kwargs):
+    tqdm_impl = _resolve_tqdm()
+    if tqdm_impl is None:
+        return _TqdmFallback(iterable=iterable, **kwargs)
+    if iterable is None:
+        return tqdm_impl(**kwargs)
+    return tqdm_impl(iterable, **kwargs)
 
 
 def _data_path(*parts: str) -> str:
@@ -563,14 +609,20 @@ def _save_embedding_dict_to_path(
 
 
 def _resolve_embedding_path(embedding_name: str, embedding_paths: Optional[Dict[str, str]] = None) -> str:
-    canonical_name = _canonical_embedding_name(embedding_name)
     if isinstance(embedding_paths, dict):
         for key, value in embedding_paths.items():
+            key_text = str(key).strip()
+            if key_text == "":
+                continue
+            if key_text == str(embedding_name).strip():
+                return str(value)
             try:
-                if _canonical_embedding_name(str(key)) == canonical_name:
+                if _canonical_embedding_name(key_text) == _canonical_embedding_name(embedding_name):
                     return str(value)
             except ValueError:
-                continue
+                if key_text.lower() == str(embedding_name).strip().lower():
+                    return str(value)
+    canonical_name = _canonical_embedding_name(embedding_name)
     return DEFAULT_PROTEIN_EMBEDDING_PATHS[canonical_name]
 
 
@@ -579,8 +631,22 @@ def load_protein_embedding_dict(
     embedding_path: Optional[str] = None,
     embedding_paths: Optional[Dict[str, str]] = None,
 ) -> Dict[str, np.ndarray]:
-    canonical_name = _canonical_embedding_name(embedding_name)
-    resolved_path = str(embedding_path) if embedding_path else _resolve_embedding_path(canonical_name, embedding_paths)
+    if embedding_path:
+        resolved_path = str(embedding_path)
+        canonical_name = str(embedding_name).strip()
+    else:
+        try:
+            canonical_name = _canonical_embedding_name(embedding_name)
+        except ValueError:
+            canonical_name = str(embedding_name).strip()
+        try:
+            resolved_path = _resolve_embedding_path(canonical_name, embedding_paths)
+        except ValueError as error:
+            raise ValueError(
+                "Unknown protein embedding source name. "
+                "Provide a matching entry in protein_embedding_paths / embedding_views for arbitrary view names. "
+                f"source={embedding_name!r}"
+            ) from error
 
     candidate_paths = [resolved_path]
     if canonical_name == "node2vec":
@@ -793,6 +859,9 @@ def apply_pathway_mask(
 
 
 def load_config_from_path(config_path: str) -> SimpleNamespace:
+    if str(config_path).lower().endswith((".yaml", ".yml")):
+        return dict_to_namespace(load_workflow_config_dict(config_path=config_path))
+
     spec = importlib.util.spec_from_file_location("config_module", config_path)
     if spec is None or spec.loader is None:
         raise ValueError(f"Unable to load config from {config_path}")
