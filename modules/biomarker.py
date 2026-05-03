@@ -607,12 +607,14 @@ def resolve_preselection_root(config: SimpleNamespace) -> str:
 
     split_subdir = str(getattr(config, "split_preselection_subdir", "split_preselection"))
     split_index = int(getattr(config, "split_number", 0))
+    explicit_global_root_candidates: List[str] = []
     explicit_split_root_candidates: List[str] = []
 
     for attr_name in ("preselection_root", "preselection_output_root"):
         explicit_root = str(getattr(config, attr_name, "")).strip()
         if explicit_root == "":
             continue
+        explicit_global_root_candidates.append(explicit_root)
         explicit_split_root_candidates.extend(
             [
                 os.path.join(explicit_root, f"split_{split_index}"),
@@ -643,7 +645,10 @@ def resolve_preselection_root(config: SimpleNamespace) -> str:
     split_root = explicit_split_root or legacy_split_root
 
     if mode is False:
-        return explicit_split_root if explicit_split_root != "" else dataset_root
+        for candidate in explicit_global_root_candidates:
+            if os.path.isdir(candidate):
+                return str(candidate)
+        return explicit_global_root_candidates[0] if explicit_global_root_candidates else dataset_root
 
     if mode is True:
         if split_root == "":
