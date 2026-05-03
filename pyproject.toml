@@ -1,12 +1,29 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "mil2het"
 version = "0.1.0"
 description = "Single-cell biomarker modeling and analysis toolkit."
+readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+  { name = "mil2het contributors" },
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
 
 dependencies = [
   "numpy>=1.21,<2",
@@ -26,6 +43,12 @@ encoder = [
 
 [project.scripts]
 mil2het = "mil2het.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/32127003/scbiomarker"
+Repository = "https://github.com/32127003/scbiomarker"
+Issues = "https://github.com/32127003/scbiomarker/issues"
+Documentation = "https://32127003.github.io/scbiomarker/"
 
 [tool.setuptools]
 py-modules = ["network_propagation"]
