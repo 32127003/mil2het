@@ -604,21 +604,51 @@ def normalize_embedding_dict(embedding_object) -> Dict[str, np.ndarray]:
 def resolve_preselection_root(config: SimpleNamespace) -> str:
     dataset_root = os.path.join(PROJECT_ROOT, "data", str(config.dataset))
     mode = getattr(config, "split_train_only_preselection", None)
-    if mode is False:
-        return dataset_root
 
     split_subdir = str(getattr(config, "split_preselection_subdir", "split_preselection"))
     split_index = int(getattr(config, "split_number", 0))
-    split_root_candidates = [
+    explicit_global_root_candidates: List[str] = []
+    explicit_split_root_candidates: List[str] = []
+
+    for attr_name in ("preselection_root", "preselection_output_root"):
+        explicit_root = str(getattr(config, attr_name, "")).strip()
+        if explicit_root == "":
+            continue
+        explicit_global_root_candidates.append(explicit_root)
+        explicit_split_root_candidates.extend(
+            [
+                os.path.join(explicit_root, f"split_{split_index}"),
+                os.path.join(explicit_root, f"split_idx_{split_index}"),
+                explicit_root,
+            ]
+        )
+
+    legacy_split_root_candidates = [
         os.path.join(dataset_root, "preselection", f"split_{split_index}"),
         os.path.join(dataset_root, split_subdir, f"split_idx_{split_index}"),
         os.path.join(dataset_root, split_subdir, f"split_{split_index}"),
     ]
-    split_root = ""
-    for candidate in split_root_candidates:
+    split_root_candidates = explicit_split_root_candidates + legacy_split_root_candidates
+
+    explicit_split_root = ""
+    for candidate in explicit_split_root_candidates:
         if os.path.isdir(candidate):
-            split_root = str(candidate)
+            explicit_split_root = str(candidate)
             break
+
+    legacy_split_root = ""
+    for candidate in legacy_split_root_candidates:
+        if os.path.isdir(candidate):
+            legacy_split_root = str(candidate)
+            break
+
+    split_root = explicit_split_root or legacy_split_root
+
+    if mode is False:
+        for candidate in explicit_global_root_candidates:
+            if os.path.isdir(candidate):
+                return str(candidate)
+        return explicit_global_root_candidates[0] if explicit_global_root_candidates else dataset_root
 
     if mode is True:
         if split_root == "":

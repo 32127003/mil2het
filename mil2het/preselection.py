@@ -11,7 +11,18 @@ _impl_module: ModuleType | None = None
 def _load_impl_module() -> ModuleType:
     global _impl_module
     if _impl_module is None:
-        _impl_module = import_module(_IMPL_MODULE)
+        try:
+            _impl_module = import_module(_IMPL_MODULE)
+        except ModuleNotFoundError as error:
+            missing_name = str(getattr(error, "name", ""))
+            if missing_name == _IMPL_MODULE or _IMPL_MODULE.startswith(f"{missing_name}."):
+                raise
+            if missing_name:
+                raise ModuleNotFoundError(
+                    f"Missing dependency '{missing_name}' required by mil2het preselection utilities.\n"
+                    "Install the project environment dependencies before using preselection."
+                ) from error
+            raise
     return _impl_module
 
 

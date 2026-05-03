@@ -1,6 +1,6 @@
 # mil2het
 
-[![CI](https://github.com/user/scbiomarker/actions/workflows/ci.yml/badge.svg)](https://github.com/user/scbiomarker/actions/workflows/ci.yml)
+[![CI](https://github.com/32127003/scbiomarker/actions/workflows/ci.yml/badge.svg)](https://github.com/32127003/scbiomarker/actions/workflows/ci.yml)
 [![Python 3.10](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/release/python-3100/)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
@@ -39,7 +39,7 @@ pip install torch-scatter  # install matching your PyTorch version
 ### From source
 
 ```bash
-git clone https://github.com/user/scbiomarker.git
+git clone https://github.com/32127003/scbiomarker.git
 cd scbiomarker
 pip install -e ".[encoder]"
 ```
@@ -242,6 +242,31 @@ pytest tests
 pip install build
 python -m build
 ```
+
+### Documentation
+
+Build the Sphinx documentation locally with the docs dependency group:
+
+```bash
+uv sync --group docs
+env -u VIRTUAL_ENV uv run sphinx-build -E -b html -W --keep-going docs docs/_build/html
+```
+
+The generated HTML is written to `docs/_build/html/` and is intentionally not
+tracked by Git.
+
+### Read the Docs
+
+Hosted documentation is configured by `.readthedocs.yaml` at the repository
+root. Read the Docs should import this repository, build the branch that
+contains the config file, install dependencies with `uv sync --group docs`, and
+use `docs/conf.py` as the Sphinx configuration.
+
+The hosted build intentionally does not install the CUDA/PyTorch stack from
+`requirements.txt`. `docs/conf.py` mocks optional Torch imports for autodoc so
+the API reference can build on Read the Docs' CPU build image. If model autodoc
+is expanded to require real Torch introspection, update the docs dependency
+strategy deliberately rather than adding the full training stack by default.
 
 ## Citation
 
