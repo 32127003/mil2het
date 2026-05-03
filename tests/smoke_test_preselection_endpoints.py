@@ -5,6 +5,7 @@ import tempfile
 import textwrap
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -65,6 +66,41 @@ def test_preselection_endpoints_exist() -> None:
         PRESELECTION_ENDPOINTS,
         module_label="mil2het.preselection",
     )
+
+
+def test_preselection_missing_transitive_dependency_has_helpful_error() -> None:
+    original_impl_module = preselection._impl_module
+    preselection._impl_module = None
+    missing_error = ModuleNotFoundError("No module named 'scanpy'", name="scanpy")
+
+    try:
+        with patch("mil2het.preselection.import_module", side_effect=missing_error):
+            try:
+                preselection._load_impl_module()
+            except ModuleNotFoundError as error:
+                assert "Missing dependency 'scanpy' required by mil2het preselection utilities." in str(error)
+                assert error.__cause__ is missing_error
+            else:
+                raise AssertionError("Expected ModuleNotFoundError for missing transitive dependency")
+    finally:
+        preselection._impl_module = original_impl_module
+
+
+def test_preselection_missing_impl_module_preserves_import_error() -> None:
+    original_impl_module = preselection._impl_module
+    preselection._impl_module = None
+    missing_error = ModuleNotFoundError("No module named 'scripts.preselection'", name="scripts.preselection")
+
+    try:
+        with patch("mil2het.preselection.import_module", side_effect=missing_error):
+            try:
+                preselection._load_impl_module()
+            except ModuleNotFoundError as error:
+                assert error is missing_error
+            else:
+                raise AssertionError("Expected ModuleNotFoundError for missing implementation module")
+    finally:
+        preselection._impl_module = original_impl_module
 
 
 def test_preselection_io_and_deg_helpers() -> None:
@@ -220,6 +256,22 @@ def test_preselection_rwr_and_pipeline() -> None:
         assert (out_dir / "DEG" / "DEG_zscore_global.tsv").is_file()
         assert (out_dir / "NP" / "NP_max.tsv").is_file()
 
+        default_deg_out_dir = temp_path / "preselection_out_default_deg"
+        preselection.preselection(
+            adata=adata,
+            ppi_network_path=str(ppi_path),
+            groupby="label",
+            group1="1",
+            group2="0",
+            celltype_column="celltype",
+            out_dir=str(default_deg_out_dir),
+            split_idx=0,
+        )
+
+        assert (default_deg_out_dir / "DEG" / "DEG_merged.tsv").is_file()
+        assert (default_deg_out_dir / "DEG" / "DEG_zscore_global.tsv").is_file()
+        assert (default_deg_out_dir / "NP" / "NP_max.tsv").is_file()
+
 
 def test_run_split_preselection_with_explicit_inputs() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -336,6 +388,8 @@ def test_preselection_load_config_from_cli() -> None:
 
 def main() -> None:
     test_preselection_endpoints_exist()
+    test_preselection_missing_transitive_dependency_has_helpful_error()
+    test_preselection_missing_impl_module_preserves_import_error()
     test_preselection_io_and_deg_helpers()
     test_preselection_rwr_and_pipeline()
     test_run_split_preselection_with_explicit_inputs()

@@ -33,11 +33,11 @@ dependencies = [
   "scikit-learn>=1.0,<2",
   "anndata>=0.9,<0.11",
   "scanpy>=1.9,<1.11",
+  "torch>=1.12,<3",
 ]
 
 [project.optional-dependencies]
 encoder = [
-  "torch>=1.12,<3",
   "torch-scatter>=2.1,<3",
 ]
 

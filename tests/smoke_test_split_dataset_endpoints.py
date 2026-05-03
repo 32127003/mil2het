@@ -44,6 +44,62 @@ def test_split_dataset_endpoints_exist() -> None:
     )
 
 
+def test_split_dataset_transitive_missing_dependency_error() -> None:
+    original_impl_module = split_dataset._impl_module
+    original_import_module = split_dataset.import_module
+
+    def fake_import_module(_module_name: str):
+        raise ModuleNotFoundError("No module named 'scanpy'", name="scanpy")
+
+    split_dataset._impl_module = None
+    split_dataset.import_module = fake_import_module
+    try:
+        try:
+            split_dataset._load_impl_module()
+        except ModuleNotFoundError as error:
+            message = str(error)
+            assert (
+                "Missing dependency 'scanpy' required by mil2het split_dataset utilities."
+                in message
+            )
+            assert "Install the project dependencies for split generation" in message
+            assert isinstance(error.__cause__, ModuleNotFoundError)
+        else:
+            raise AssertionError(
+                "expected transitive ModuleNotFoundError to be re-raised with context"
+            )
+    finally:
+        split_dataset.import_module = original_import_module
+        split_dataset._impl_module = original_impl_module
+
+
+def test_split_dataset_missing_impl_module_keeps_import_error() -> None:
+    original_impl_module = split_dataset._impl_module
+    original_import_module = split_dataset.import_module
+
+    def fake_import_module(module_name: str):
+        raise ModuleNotFoundError(
+            "No module named 'scripts.split_dataset'",
+            name=module_name,
+        )
+
+    split_dataset._impl_module = None
+    split_dataset.import_module = fake_import_module
+    try:
+        try:
+            split_dataset._load_impl_module()
+        except ModuleNotFoundError as error:
+            assert str(error) == "No module named 'scripts.split_dataset'"
+            assert error.__cause__ is None
+        else:
+            raise AssertionError(
+                "expected missing implementation module to preserve import error"
+            )
+    finally:
+        split_dataset.import_module = original_import_module
+        split_dataset._impl_module = original_impl_module
+
+
 def test_split_dataset_utilities() -> None:
     rng = np.random.default_rng(0)
 
@@ -223,6 +279,8 @@ def test_split_dataset_load_config_from_cli() -> None:
 
 def main() -> None:
     test_split_dataset_endpoints_exist()
+    test_split_dataset_transitive_missing_dependency_error()
+    test_split_dataset_missing_impl_module_keeps_import_error()
     test_split_dataset_utilities()
     test_split_dataset_build_and_save_folds()
     test_split_dataset_load_config_from_cli()

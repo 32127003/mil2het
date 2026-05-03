@@ -11,7 +11,17 @@ _impl_module: ModuleType | None = None
 def _load_impl_module() -> ModuleType:
     global _impl_module
     if _impl_module is None:
-        _impl_module = import_module(_IMPL_MODULE)
+        try:
+            _impl_module = import_module(_IMPL_MODULE)
+        except ModuleNotFoundError as error:
+            missing_name = str(getattr(error, "name", ""))
+            if missing_name in {"scripts", _IMPL_MODULE}:
+                raise
+            raise ModuleNotFoundError(
+                f"Missing dependency '{missing_name}' required by mil2het split_dataset utilities.\n"
+                "Install the project dependencies for split generation before using "
+                "mil2het.split_dataset.\n"
+            ) from error
     return _impl_module
 
 
