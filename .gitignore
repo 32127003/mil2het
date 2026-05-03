@@ -25,6 +25,7 @@ old/
 .coverage
 .coverage.*
 htmlcov/
+docs/_build/
 
 # Jupyter
 .ipynb_checkpoints/

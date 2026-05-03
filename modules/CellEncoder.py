@@ -18,6 +18,9 @@ from typing import Dict, Optional, Sequence, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as torch_functional
+
+# Keep CellEncoder importable in CPU-only or constrained research environments
+# where PyG extension wheels are unavailable; prefer torch_scatter when present.
 try:
     from torch_scatter import scatter_add as _scatter_add
     from torch_scatter import scatter_max as _scatter_max
