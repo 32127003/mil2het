@@ -20,35 +20,30 @@ The module supports multi-view gene embeddings (e.g., protein language model emb
 
 ## Installation
 
-### From PyPI (recommended)
-
-```bash
-pip install mil2het
-```
-
-### With encoder support
-
-For GPU-accelerated cell encoding and training:
-
-```bash
-pip install "mil2het[encoder]"
-pip install torch  # install PyTorch for your system
-pip install torch-scatter  # install matching your PyTorch version
-```
-
-### From source
+### From source (recommended)
 
 ```bash
 git clone https://github.com/32127003/scbiomarker.git
 cd scbiomarker
-pip install -e ".[encoder]"
+uv sync
+```
+
+The uv configuration installs the `torch-scatter` wheel built for PyTorch 2.11
+and CUDA 13.0.
+
+### From PyPI
+
+```bash
+pip install torch==2.11.0
+pip install torch-scatter -f https://data.pyg.org/whl/torch-2.11.0+cu130.html
+pip install mil2het
 ```
 
 ### Requirements
 
 - Python >= 3.10
-- PyTorch >= 1.12 (optional, for encoder/training)
-- torch-scatter >= 2.1 (optional, for encoder/training)
+- PyTorch == 2.11.0
+- torch-scatter >= 2.1
 
 ## Quick Start
 
@@ -227,13 +222,13 @@ prior = MultiViewPriorInterfaceFIND(
 
 ```bash
 # Install development dependencies
-pip install -e ".[encoder]" pytest
+uv sync
 
 # Run CPU-only tests
-pytest tests --cpu-only
+uv run pytest tests --cpu-only
 
 # Run all tests (requires GPU)
-pytest tests
+uv run pytest tests
 ```
 
 ### Building
