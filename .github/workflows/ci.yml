@@ -26,6 +26,8 @@ jobs:
             torch-version: "2.7.1"
           - python-version: "3.12"
             torch-version: "2.7.1"
+          - python-version: "3.12"
+            torch-version: "2.11.0"
 
     steps:
       - name: Checkout
@@ -44,17 +46,34 @@ jobs:
         run: |
           python -m build --wheel
 
-      - name: Install mil2het wheel
-        run: |
-          python -m pip install dist/*.whl
-
       - name: Install CPU torch
         run: |
           python -m pip install --index-url https://download.pytorch.org/whl/cpu "torch==${{ matrix.torch-version }}"
 
+      - name: Install base mil2het wheel
+        run: |
+          python -m pip install dist/*.whl
+
+      - name: Verify optional dependency contract
+        run: |
+          cd /tmp
+          python - <<'PY'
+          import importlib.util
+
+          import mil2het
+
+          assert importlib.util.find_spec("torch_scatter") is None
+          try:
+              mil2het.MultipleInstanceLearning.PatientMILAggregator
+          except ModuleNotFoundError as error:
+              assert "Missing optional dependency 'torch_scatter'" in str(error)
+          else:
+              raise AssertionError("MIL features imported without torch-scatter")
+          PY
+
       - name: Install CPU torch-scatter
         run: |
-          python -m pip install --no-build-isolation torch-scatter \
+          python -m pip install --only-binary=torch-scatter torch-scatter \
             -f "https://data.pyg.org/whl/torch-${{ matrix.torch-version }}+cpu.html"
 
       - name: Prepare wheel validation workspace

@@ -21,7 +21,7 @@ conda run -n scbiomarker-test python -m pip install \
   torch==2.5.1
 
 # Install matching CPU torch-scatter wheel.
-conda run -n scbiomarker-test python -m pip install --no-build-isolation \
+conda run -n scbiomarker-test python -m pip install --only-binary=torch-scatter \
   torch-scatter \
   -f https://data.pyg.org/whl/torch-2.5.1+cpu.html
 ```

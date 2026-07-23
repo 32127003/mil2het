@@ -156,6 +156,45 @@ def test_biomarker_config_and_path_helpers() -> None:
         resolved = biomarker.resolve_path_with_base_dirs(base_dirs, "asthma_config.py", prefer_existing=True)
         assert os.path.samefile(resolved, snapshot_copy)
 
+        explicit_preselection_root = temp_path / "explicit_preselection"
+        explicit_split_root = explicit_preselection_root / "split_2"
+        explicit_split_root.mkdir(parents=True)
+        output_preselection_root = temp_path / "output_preselection"
+        output_split_root = output_preselection_root / "split_idx_2"
+        output_split_root.mkdir(parents=True)
+        resolved_preselection_root = biomarker.resolve_preselection_root(
+            SimpleNamespace(
+                dataset="toy",
+                split_number=2,
+                split_train_only_preselection=None,
+                preselection_root=str(explicit_preselection_root),
+                preselection_output_root=str(output_preselection_root),
+            )
+        )
+        assert os.path.samefile(resolved_preselection_root, explicit_split_root)
+
+        resolved_output_preselection_root = biomarker.resolve_preselection_root(
+            SimpleNamespace(
+                dataset="toy",
+                split_number=2,
+                split_train_only_preselection=None,
+                preselection_root="",
+                preselection_output_root=str(output_preselection_root),
+            )
+        )
+        assert os.path.samefile(resolved_output_preselection_root, output_split_root)
+
+        resolved_global_preselection_root = biomarker.resolve_preselection_root(
+            SimpleNamespace(
+                dataset="toy",
+                split_number=2,
+                split_train_only_preselection=False,
+                preselection_root=str(explicit_preselection_root),
+                preselection_output_root=str(output_preselection_root),
+            )
+        )
+        assert os.path.samefile(resolved_global_preselection_root, explicit_preselection_root)
+
         run_relative_snapshot = run_dir / "explicit_workflow.yaml"
         run_relative_snapshot.write_text("workflow:\n  input_h5ad: /tmp/run_relative.h5ad\n", encoding="utf-8")
         run_relative_located = biomarker.locate_run_snapshot_config_path(

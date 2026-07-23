@@ -293,10 +293,13 @@ def run_pipeline(
     training_artifacts: dict[str, Any] | None = None
     analysis_artifacts: dict[str, Any] | None = None
 
+    training_device = device
     if not bool(config_dict["analysis_only"]) and device is None:
         resolved_gpu_index = 0 if gpu_index is None else int(gpu_index)
         setattr(config_namespace, "gpu", resolved_gpu_index)
         config_dict["gpu"] = resolved_gpu_index
+        if resolved_gpu_index < 0:
+            training_device = "cpu"
 
     if not bool(config_dict["analysis_only"]):
         split_dataset.run_split_generation(config_namespace)
@@ -307,7 +310,7 @@ def run_pipeline(
         setattr(config_namespace, "preselection_output_root", preselection_output_root)
         phases_completed.append("preselection")
 
-        training_artifacts = dict(train.run_training_phase(config_namespace, device=device))
+        training_artifacts = dict(train.run_training_phase(config_namespace, device=training_device))
         effective_run_dir = str(training_artifacts["output_dir"])
         config_dict["run_dir"] = effective_run_dir
         config_dict["biomarker_run_dir"] = effective_run_dir

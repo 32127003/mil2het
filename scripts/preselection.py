@@ -27,6 +27,9 @@ from modules.utils import *
 from configs.config import *
 
 
+DEFAULT_DEG_MAX_P_VALUE = 0.05
+DEFAULT_DEG_MIN_ABS_LOGFC = 1.0
+
 
 
 def read_gene_list(file_path: str) -> List[str]:
@@ -885,10 +888,10 @@ def preselection(
         label_groups=groups,
         ppi_node_set=ppi_node_set,
         max_p_value=float(
-            deg_max_p_value if deg_max_p_value is not None else float(config.deg_max_p_value)
+            deg_max_p_value if deg_max_p_value is not None else DEFAULT_DEG_MAX_P_VALUE
         ),
         min_abs_logfc=float(
-            deg_min_abs_logfc if deg_min_abs_logfc is not None else float(config.deg_min_abs_logfc)
+            deg_min_abs_logfc if deg_min_abs_logfc is not None else DEFAULT_DEG_MIN_ABS_LOGFC
         ),
         allow_empty_pass_set="allow_empty",
     )
@@ -1038,17 +1041,24 @@ def preselection(
         write_empty_np_max("no DEG seeds available")
         return
 
+    rwr_defaults = RWRConfig()
     rwr_config = RWRConfig(
         restart_probability=float(
-            restart_prob if restart_prob is not None else float(config.restart_prob)
+            restart_prob if restart_prob is not None else rwr_defaults.restart_probability
         ),
         convergence_threshold_l1=float(
             convergence_threshold_l1
             if convergence_threshold_l1 is not None
-            else float(config.convergence_threshold_l1)
+            else rwr_defaults.convergence_threshold_l1
         ),
-        max_iterations=int(max_iterations if max_iterations is not None else int(config.max_iterations)),
-        treat_as_undirected=(not bool(directed if directed is not None else bool(config.directed))),
+        max_iterations=int(
+            max_iterations if max_iterations is not None else rwr_defaults.max_iterations
+        ),
+        treat_as_undirected=(
+            not bool(directed)
+            if directed is not None
+            else bool(rwr_defaults.treat_as_undirected)
+        ),
     )
 
     try:
