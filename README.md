@@ -59,6 +59,57 @@ for other supported PyTorch and CUDA combinations.
 - PyTorch >= 2.3, < 3
 - torch-scatter >= 2.1, < 3 (optional; required for MIL/training/biomarker features)
 
+## Docker
+
+The Docker image is a batch command, not a server. Each invocation runs one
+`mil2het` workflow, writes its artifacts to a mounted output directory, and
+then exits. It does not expose a network port.
+
+Build the production image:
+
+```bash
+docker build -t mil2het:0.1.0 .
+docker run --rm mil2het:0.1.0 --help
+```
+
+Build the test target to run the CPU-only test suite inside the build
+environment:
+
+```bash
+docker build --target test -t mil2het:test .
+```
+
+Inputs and resources should be mounted read-only under `/inputs`. Outputs must
+be mounted read-write under `/outputs`. The container runs as UID/GID 1000.
+
+```bash
+docker run --rm \
+  --gpus all \
+  --shm-size=8g \
+  --mount type=bind,src="$PWD/inputs",dst=/inputs,readonly \
+  --mount type=bind,src="$PWD/outputs",dst=/outputs \
+  mil2het:0.1.0 \
+  /inputs/cohort.h5ad \
+  --config /inputs/config.yaml \
+  --pathway-path /inputs/pathways.gmt \
+  --output-dir /outputs/run-001 \
+  --gpu 0
+```
+
+GPU execution requires the NVIDIA driver and NVIDIA Container Toolkit on the
+host. After configuring the toolkit for Docker, verify the container sees the
+GPU:
+
+```bash
+docker run --rm --gpus all \
+  --entrypoint /opt/venv/bin/python \
+  mil2het:0.1.0 \
+  -c 'import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))'
+```
+
+Large `.h5ad` inputs, embeddings, checkpoints, and generated artifacts are
+runtime mounts and are not copied into the image.
+
 ## Quick Start
 
 ### Command Line Interface
