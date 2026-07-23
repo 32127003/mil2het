@@ -896,61 +896,23 @@ def load_k_np_genes(
     return selected, genes
 
 
-def _candidate_training_preselection_roots(root_path: str, split_number: int, split_subdir: str) -> List[str]:
-    normalized_root = str(root_path).strip()
-    if normalized_root == "":
-        return []
-
-    normalized_basename = os.path.basename(os.path.normpath(normalized_root))
-    if normalized_basename.startswith("split_"):
-        return [normalized_root]
-    if normalized_basename == split_subdir:
-        return [
-            os.path.join(normalized_root, f"split_idx_{split_number}"),
-            os.path.join(normalized_root, f"split_{split_number}"),
-            normalized_root,
-        ]
-    return [
-        os.path.join(normalized_root, f"split_{split_number}"),
-        os.path.join(normalized_root, split_subdir, f"split_idx_{split_number}"),
-        os.path.join(normalized_root, split_subdir, f"split_{split_number}"),
-        normalized_root,
-    ]
-
-
 def resolve_training_preselection_root(config: SimpleNamespace) -> str:
     split_number = int(getattr(config, "split_number", 0))
-    split_subdir = sanitize_filename_component(
-        str(getattr(config, "split_preselection_subdir", "split_preselection"))
-    )
-    dataset_root = os.path.join(PROJECT_ROOT, "data", str(config.dataset))
+    preselection_output_root = str(
+        getattr(config, "preselection_output_root", "") or ""
+    ).strip()
+    if preselection_output_root == "":
+        raise ValueError("config.preselection_output_root must be set.")
 
-    configured_root_candidates = [
-        str(getattr(config, "preselection_root", "") or "").strip(),
-        str(getattr(config, "preselection_output_root", "") or "").strip(),
-        os.path.join(dataset_root, "preselection"),
-        os.path.join(dataset_root, split_subdir),
-    ]
-
-    candidates: List[str] = []
-    for root_path in configured_root_candidates:
-        for candidate in _candidate_training_preselection_roots(
-            root_path=root_path,
-            split_number=split_number,
-            split_subdir=split_subdir,
-        ):
-            if candidate not in candidates:
-                candidates.append(candidate)
-
-    for candidate in candidates:
-        if not os.path.isdir(candidate):
-            continue
-        if os.path.isdir(os.path.join(candidate, "NP")) or os.path.isdir(os.path.join(candidate, "DEG")):
-            return str(candidate)
+    split_root = os.path.join(preselection_output_root, f"split_{split_number}")
+    if os.path.isdir(os.path.join(split_root, "NP")) or os.path.isdir(
+        os.path.join(split_root, "DEG")
+    ):
+        return split_root
 
     raise FileNotFoundError(
         "split-specific preselection directory not found. "
-        f"Tried: {candidates}. Run modules/preselection.py first."
+        f"Expected: {split_root}. Run modules/preselection.py first."
     )
 
 def _embedding_source_path_for_logging(
@@ -2057,6 +2019,9 @@ def build_experiment_directory(config):
         "best_checkpoint_path": os.path.join(output_dir, "best_checkpoint.pt"),
         "last_checkpoint_path": os.path.join(output_dir, "last_checkpoint.pt"),
         "epoch5_checkpoint_path": os.path.join(output_dir, "epoch5_checkpoint.pt"),
+        "final_metrics_path": os.path.join(output_dir, "final_metrics.json"),
+        "patient_predictions_val_path": os.path.join(output_dir, "patient_predictions_val.csv"),
+        "patient_predictions_test_path": os.path.join(output_dir, "patient_predictions_test.csv"),
     }
 
 
@@ -2753,7 +2718,6 @@ def run_training_phase(config, *, device=None):
 
     print("loading preselection data...", flush=True)
     preselection_root = resolve_training_preselection_root(config)
-    config.preselection_root = str(preselection_root)
     setattr(config, "run_dir", str(artifacts["output_dir"]))
 
     output_root_value = str(getattr(config, "output_root", "") or "").strip()
@@ -2768,7 +2732,7 @@ def run_training_phase(config, *, device=None):
             "experiment_root": _absolute_path_text(config.experiment_root),
             "splits_directory": _absolute_path_text(config.splits_directory),
             "preselection_output_root": _absolute_path_text(getattr(config, "preselection_output_root", "") or ""),
-            "preselection_root": _absolute_path_text(preselection_root),
+            "preselection_split_root": _absolute_path_text(preselection_root),
             "ppi_path": _absolute_path_text(config.ppi_path),
             "run_dir": _absolute_path_text(artifacts["output_dir"]),
         },

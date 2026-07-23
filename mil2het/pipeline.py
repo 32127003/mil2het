@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import os
 import tempfile
 from dataclasses import dataclass
@@ -8,7 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping, MutableMapping
 
 import yaml
-from anndata import AnnData
+from anndata import AnnData, read_h5ad
 
 from . import biomarker, config as workflow_config, preselection, split_dataset, train
 
@@ -165,6 +166,178 @@ def _write_config_snapshot(config_dict: Mapping[str, Any], target_path: str) -> 
     return str(target)
 
 
+def _ensure_writable_output_root(output_root: str) -> str:
+    output_root_text = str(output_root or "").strip()
+    if output_root_text == "":
+        raise ValueError("workflow.output_root must be a non-empty directory path.")
+
+    target = Path(output_root_text).resolve()
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        raise ValueError(
+            f"workflow.output_root cannot be created: {output_root_text}: {error}"
+        ) from error
+    if not target.is_dir():
+        raise ValueError(
+            f"workflow.output_root is not a directory: {output_root_text}."
+        )
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            prefix=".mil2het-write-test-",
+            dir=str(target),
+        ):
+            pass
+    except OSError as error:
+        raise ValueError(
+            f"workflow.output_root is not writable: {output_root_text}: {error}"
+        ) from error
+    return str(target)
+
+
+def _validate_training_preflight(config_dict: Mapping[str, Any]) -> None:
+    _ensure_writable_output_root(str(config_dict.get("output_root", "") or ""))
+
+    num_folds = int(config_dict.get("num_folds", 0))
+    split_number = int(config_dict.get("split_number", 0))
+    if num_folds < 3:
+        raise ValueError(
+            "workflow.num_folds must be >= 3 for separate train, validation, "
+            f"and test folds; received {num_folds}."
+        )
+    if not 0 <= split_number < num_folds:
+        raise ValueError(
+            "workflow.split_number must satisfy "
+            "0 <= split_number < workflow.num_folds; "
+            f"received split_number={split_number}, num_folds={num_folds}."
+        )
+
+    input_h5ad = str(config_dict.get("input_h5ad", "") or "").strip()
+    if input_h5ad == "":
+        raise ValueError(
+            "workflow.input_h5ad is required for training "
+            "(expected a readable container path such as /inputs/cohort.h5ad)."
+        )
+    if not Path(input_h5ad).is_file():
+        raise ValueError(
+            f"workflow.input_h5ad file not found: {input_h5ad} "
+            "(inside Docker, mount the cohort under /inputs)."
+        )
+
+    ppi_path = str(config_dict.get("ppi_path", "") or "").strip()
+    if ppi_path == "":
+        raise ValueError(
+            "resources.ppi_path is required for training "
+            "(expected a readable container path such as /inputs/ppi.tsv)."
+        )
+    if not Path(ppi_path).is_file():
+        raise ValueError(
+            f"resources.ppi_path file not found: {ppi_path} "
+            "(inside Docker, mount the PPI file under /inputs)."
+        )
+
+    embedding_views = dict(config_dict.get("embedding_views", {}) or {})
+    if not embedding_views:
+        raise ValueError(
+            "resources.embedding_views must configure at least one gene embedding file."
+        )
+    for view_name, embedding_path_value in embedding_views.items():
+        embedding_path = str(embedding_path_value or "").strip()
+        field_name = f"resources.embedding_views.{view_name}"
+        if embedding_path == "":
+            raise ValueError(f"{field_name} must be a non-empty file path.")
+        if not Path(embedding_path).is_file():
+            raise ValueError(
+                f"{field_name} file not found: {embedding_path} "
+                "(inside Docker, mount embedding files under /inputs)."
+            )
+
+    adata = read_h5ad(input_h5ad, backed="r")
+    try:
+        available_columns = set(str(column) for column in adata.obs.columns)
+        required_columns = {
+            "columns.patient": str(
+                config_dict.get("patient_column", "") or ""
+            ).strip(),
+            "columns.celltype": str(
+                config_dict.get("celltype_column", "") or ""
+            ).strip(),
+            "columns.label": str(config_dict.get("label_column", "") or "").strip(),
+        }
+        for field_name, column_name in required_columns.items():
+            if column_name == "":
+                raise ValueError(f"{field_name} must name a column in adata.obs.")
+            if column_name not in available_columns:
+                raise ValueError(
+                    f"{field_name}='{column_name}' was not found in adata.obs. "
+                    f"Available columns: {sorted(available_columns)}."
+                )
+    finally:
+        adata.file.close()
+
+
+def _write_latest_run_manifest(
+    *,
+    output_root: str,
+    run_dir: str,
+    config_snapshot_path: str,
+    training_artifacts: Mapping[str, Any],
+) -> str:
+    root = Path(output_root).resolve()
+    target = root / "latest_run.json"
+
+    artifact_paths = {
+        "run_dir": run_dir,
+        "best_checkpoint_path": str(training_artifacts["best_checkpoint_path"]),
+        "final_metrics_path": str(training_artifacts["final_metrics_path"]),
+        "patient_predictions_val_path": str(
+            training_artifacts["patient_predictions_val_path"]
+        ),
+        "patient_predictions_test_path": str(
+            training_artifacts["patient_predictions_test_path"]
+        ),
+        "config_snapshot_path": config_snapshot_path,
+    }
+    absolute_paths = {
+        key: str(Path(path_value).resolve())
+        for key, path_value in artifact_paths.items()
+    }
+    relative_paths = {
+        key: os.path.relpath(path_value, start=str(root))
+        for key, path_value in absolute_paths.items()
+    }
+    payload: dict[str, Any] = {
+        "schema_version": 1,
+        "status": "training_complete",
+        "output_root": str(root),
+        **absolute_paths,
+        "relative_paths": relative_paths,
+    }
+
+    temporary_path = ""
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            prefix=".latest_run.json.",
+            suffix=".tmp",
+            dir=str(root),
+            delete=False,
+        ) as handle:
+            temporary_path = handle.name
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, target)
+    finally:
+        if temporary_path != "" and os.path.exists(temporary_path):
+            os.unlink(temporary_path)
+    return str(target)
+
+
 @dataclass(slots=True)
 class PipelineResult:
     config: dict[str, Any]
@@ -178,6 +351,7 @@ class PipelineResult:
     config_snapshot_path: str
     training_artifacts: dict[str, Any] | None
     analysis_artifacts: dict[str, Any] | None
+    latest_run_path: str = ""
     materialized_input_h5ad: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -193,6 +367,7 @@ class PipelineResult:
             "config_snapshot_path": self.config_snapshot_path,
             "training_artifacts": copy.deepcopy(self.training_artifacts),
             "analysis_artifacts": copy.deepcopy(self.analysis_artifacts),
+            "latest_run_path": self.latest_run_path,
             "materialized_input_h5ad": self.materialized_input_h5ad,
         }
 
@@ -265,6 +440,7 @@ def run_pipeline(
         )
         if bool(provisional_config.get("analysis_only", False)):
             raise ValueError("analysis_only requires run_dir and does not accept adata input.")
+        _ensure_writable_output_root(str(provisional_config["output_root"]))
         materialized_input_h5ad = _materialize_adata(adata, str(provisional_config["output_root"]))
         _deep_merge(
             merged_overrides,
@@ -290,6 +466,7 @@ def run_pipeline(
     effective_run_dir = str(config_dict.get("run_dir", "") or "")
     effective_analysis_output_dir = str(config_dict["biomarker_output_dir"])
     config_snapshot_path = ""
+    latest_run_path = ""
     training_artifacts: dict[str, Any] | None = None
     analysis_artifacts: dict[str, Any] | None = None
 
@@ -302,6 +479,7 @@ def run_pipeline(
             training_device = "cpu"
 
     if not bool(config_dict["analysis_only"]):
+        _validate_training_preflight(config_dict)
         split_dataset.run_split_generation(config_namespace)
         phases_completed.append("split")
 
@@ -312,6 +490,22 @@ def run_pipeline(
 
         training_artifacts = dict(train.run_training_phase(config_namespace, device=training_device))
         effective_run_dir = str(training_artifacts["output_dir"])
+        training_artifacts.setdefault(
+            "best_checkpoint_path",
+            os.path.join(effective_run_dir, "best_checkpoint.pt"),
+        )
+        training_artifacts.setdefault(
+            "final_metrics_path",
+            os.path.join(effective_run_dir, "final_metrics.json"),
+        )
+        training_artifacts.setdefault(
+            "patient_predictions_val_path",
+            os.path.join(effective_run_dir, "patient_predictions_val.csv"),
+        )
+        training_artifacts.setdefault(
+            "patient_predictions_test_path",
+            os.path.join(effective_run_dir, "patient_predictions_test.csv"),
+        )
         config_dict["run_dir"] = effective_run_dir
         config_dict["biomarker_run_dir"] = effective_run_dir
         phases_completed.append("training")
@@ -319,6 +513,12 @@ def run_pipeline(
         config_snapshot_path = _write_config_snapshot(
             config_dict,
             os.path.join(effective_run_dir, "workflow_config.yaml"),
+        )
+        latest_run_path = _write_latest_run_manifest(
+            output_root=str(config_dict["output_root"]),
+            run_dir=effective_run_dir,
+            config_snapshot_path=config_snapshot_path,
+            training_artifacts=training_artifacts,
         )
     else:
         if config_path is not None and str(config_path).strip() != "":
@@ -359,6 +559,7 @@ def run_pipeline(
         config_snapshot_path=config_snapshot_path,
         training_artifacts=copy.deepcopy(training_artifacts),
         analysis_artifacts=copy.deepcopy(analysis_artifacts),
+        latest_run_path=latest_run_path,
         materialized_input_h5ad=materialized_input_h5ad,
     )
 

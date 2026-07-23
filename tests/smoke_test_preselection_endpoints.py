@@ -35,7 +35,6 @@ PRESELECTION_ENDPOINTS = [
     "discover_split_indices",
     "preselection",
     "run_split_preselection",
-    "build_legacy_preselection_config",
     "build_preselection_config_from_cli_args",
     "build_preselection_arg_parser",
     "load_preselection_config_from_cli",
@@ -45,7 +44,12 @@ PRESELECTION_ENDPOINTS = [
 def build_deg_adata() -> sc.AnnData:
     num_cells = 40
     num_genes = 4
-    x = np.random.randn(num_cells, num_genes).astype(np.float32)
+    rng = np.random.default_rng(0)
+    x = rng.lognormal(
+        mean=0.0,
+        sigma=0.25,
+        size=(num_cells, num_genes),
+    ).astype(np.float32)
 
     labels = np.array(["1"] * 20 + ["0"] * 20, dtype=object)
     x[:20, 0] += 2.0
@@ -234,7 +238,7 @@ def test_preselection_rwr_and_pipeline() -> None:
         rwr_scores = preselection.run_rwr(p_matrix=p_matrix, p0=p0, rwr_config=rwr_cfg)
         assert rwr_scores.shape[0] == len(node_order)
 
-        out_dir = temp_path / "preselection_out"
+        output_dir = temp_path / "preselection_out"
         preselection.preselection(
             adata=adata,
             ppi_network_path=str(ppi_path),
@@ -242,7 +246,7 @@ def test_preselection_rwr_and_pipeline() -> None:
             group1="1",
             group2="0",
             celltype_column="celltype",
-            out_dir=str(out_dir),
+            output_dir=str(output_dir),
             split_idx=0,
             deg_max_p_value=1.0,
             deg_min_abs_logfc=0.0,
@@ -252,9 +256,9 @@ def test_preselection_rwr_and_pipeline() -> None:
             directed=False,
         )
 
-        assert (out_dir / "DEG" / "DEG_merged.tsv").is_file()
-        assert (out_dir / "DEG" / "DEG_zscore_global.tsv").is_file()
-        assert (out_dir / "NP" / "NP_max.tsv").is_file()
+        assert (output_dir / "DEG" / "DEG_merged.tsv").is_file()
+        assert (output_dir / "DEG" / "DEG_zscore_global.tsv").is_file()
+        assert (output_dir / "NP" / "NP_max.tsv").is_file()
 
         default_deg_out_dir = temp_path / "preselection_out_default_deg"
         preselection.preselection(
@@ -264,7 +268,7 @@ def test_preselection_rwr_and_pipeline() -> None:
             group1="1",
             group2="0",
             celltype_column="celltype",
-            out_dir=str(default_deg_out_dir),
+            output_dir=str(default_deg_out_dir),
             split_idx=0,
         )
 
@@ -304,7 +308,7 @@ def test_run_split_preselection_with_explicit_inputs() -> None:
             celltype_column="celltype",
             ppi_path=str(ppi_path),
             splits_directory=str(splits_dir),
-            out_dir=str(temp_path / "preselection"),
+            preselection_output_root=str(temp_path / "preselection"),
             num_folds=1,
             binary_positive_label="1",
             binary_negative_label="0",
@@ -378,7 +382,9 @@ def test_preselection_load_config_from_cli() -> None:
         )
         assert config.dataset == "config_preselection"
         assert config.splits_directory == str(splits_dir)
-        assert config.out_dir == str(override_root / "preselection")
+        assert config.preselection_output_root == str(override_root / "preselection")
+        assert not hasattr(config, "out_dir")
+        assert not hasattr(config, "output_dir")
 
         output_root = preselection.run_split_preselection(config)
         assert output_root == str(override_root / "preselection")

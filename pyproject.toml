@@ -59,10 +59,10 @@ explicit = true
 mil2het = "mil2het.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/32127003/scbiomarker"
-Repository = "https://github.com/32127003/scbiomarker"
-Issues = "https://github.com/32127003/scbiomarker/issues"
-Documentation = "https://32127003.github.io/scbiomarker/"
+Homepage = "https://github.com/32127003/mil2het"
+Repository = "https://github.com/32127003/mil2het"
+Issues = "https://github.com/32127003/mil2het/issues"
+Documentation = "https://github.com/32127003/mil2het/tree/main/docs"
 
 [tool.setuptools]
 py-modules = ["network_propagation"]

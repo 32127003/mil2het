@@ -1,20 +1,15 @@
 workflow:
   input_h5ad: /inputs/cohort.h5ad
   output_root: /outputs/mil2het
-  run_dir: ""
-  analysis_output_dir: /outputs/mil2het/analysis
   num_folds: 5
   split_number: 0
   seed: 42
-  train_only: false
-  analysis_only: false
+  train_only: true
 
 columns:
   patient: patient_id
   celltype: cell_type
   label: phenotype
-  sample: null
-  treatment: null
 
 labels:
   positive: ["1"]
@@ -31,6 +26,3 @@ training:
   epochs: 200
   lr: 0.0003
   k: 2000
-
-# The current analysis loader accepts JSON, pickle, or PyTorch pathway mappings.
-biomarker_pathway_gene_set_path: /inputs/reactome.json

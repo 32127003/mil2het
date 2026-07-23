@@ -604,30 +604,44 @@ def normalize_workflow_config(config: Mapping[str, Any]) -> dict[str, Any]:
         field_name="prior_view_sources",
     )
 
-    positive_labels = list(
-        _coalesce(
-            config,
-            (
-                ("labels", "positive"),
-                ("binary_positive_labels",),
-            ),
-            ["1"],
+    positive_labels = [
+        str(value).strip()
+        for value in list(
+            _coalesce(
+                config,
+                (
+                    ("labels", "positive"),
+                    ("binary_positive_labels",),
+                ),
+                ["1"],
+            )
         )
-    )
-    negative_labels = list(
-        _coalesce(
-            config,
-            (
-                ("labels", "negative"),
-                ("binary_negative_labels",),
-            ),
-            ["0"],
+        if str(value).strip() != ""
+    ]
+    negative_labels = [
+        str(value).strip()
+        for value in list(
+            _coalesce(
+                config,
+                (
+                    ("labels", "negative"),
+                    ("binary_negative_labels",),
+                ),
+                ["0"],
+            )
         )
-    )
+        if str(value).strip() != ""
+    ]
     if len(positive_labels) == 0:
         raise ValueError("positive labels must be non-empty.")
     if len(negative_labels) == 0:
         raise ValueError("negative labels must be non-empty.")
+    overlapping_labels = sorted(set(positive_labels).intersection(negative_labels))
+    if overlapping_labels:
+        raise ValueError(
+            "labels.positive and labels.negative must be disjoint; "
+            f"overlapping values: {overlapping_labels}."
+        )
 
     train_only = bool(
         _coalesce(
