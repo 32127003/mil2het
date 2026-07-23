@@ -4,7 +4,7 @@
 [![Python 3.10](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/release/python-3100/)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
-[![PyTorch](https://img.shields.io/badge/pytorch-2.3%20%7C%202.5%20%7C%202.7-orange.svg)](https://pytorch.org/)
+[![PyTorch](https://img.shields.io/badge/pytorch-2.3%20%E2%80%93%202.11-orange.svg)](https://pytorch.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 A Python toolkit for single-cell biomarker discovery using multiple instance learning and multi-view gene embeddings.
@@ -28,22 +28,36 @@ cd scbiomarker
 uv sync
 ```
 
-The uv configuration installs the `torch-scatter` wheel built for PyTorch 2.11
-and CUDA 13.0.
+The checked-in uv environment is constrained to PyTorch 2.11 and installs the
+matching CUDA 13.0 `torch-scatter` wheel for development.
 
 ### From PyPI
 
 ```bash
-pip install torch==2.11.0
-pip install torch-scatter -f https://data.pyg.org/whl/torch-2.11.0+cu130.html
 pip install mil2het
 ```
+
+`torch-scatter` is optional at installation time. It is required when using the
+MIL, training, and biomarker features. Install the wheel that exactly matches
+your PyTorch and CUDA versions, then install the `encoder` extra. For example:
+
+```bash
+pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cu130
+pip install --only-binary=torch-scatter \
+  -f https://data.pyg.org/whl/torch-2.11.0+cu130.html \
+  "mil2het[encoder]"
+```
+
+Using `--only-binary=torch-scatter` makes an unsupported combination fail
+clearly instead of attempting an unreliable source build. See the
+[PyG installation guide](https://pytorch-geometric.readthedocs.io/en/latest/install/installation.html)
+for other supported PyTorch and CUDA combinations.
 
 ### Requirements
 
 - Python >= 3.10
-- PyTorch == 2.11.0
-- torch-scatter >= 2.1
+- PyTorch >= 2.3, < 3
+- torch-scatter >= 2.1, < 3 (optional; required for MIL/training/biomarker features)
 
 ## Quick Start
 

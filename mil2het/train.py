@@ -28,7 +28,7 @@ def _load_impl_module() -> ModuleType:
                     "1) Install CUDA-specific PyTorch for your system:\n"
                     "   https://pytorch.org/get-started/locally/\n"
                     "2) Install torch-scatter for the same torch/cuda pair:\n"
-                    "   pip install torch-scatter -f "
+                    "   pip install --only-binary=torch-scatter torch-scatter -f "
                     "https://data.pyg.org/whl/torch-${TORCH}+${CUDA}.html\n"
                 ) from error
             raise
