@@ -31,7 +31,7 @@ def build_cli_arg_parser() -> argparse.ArgumentParser:
         dest="gpu_index",
         type=int,
         default=None,
-        help="GPU index for runtime selection. Use -1 to force CPU analysis.",
+        help="GPU index for runtime selection. Use -1 to force CPU execution.",
     )
     return parser
 

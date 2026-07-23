@@ -50,6 +50,7 @@ def build_fake_result(temp_path: Path) -> PipelineResult:
 
 def test_cli_help_and_override_wiring() -> None:
     help_text = cli.build_cli_arg_parser().format_help()
+    normalized_help_text = " ".join(help_text.split())
     assert "mil2het" in help_text
     assert "--config" in help_text
     assert "--gpu" in help_text
@@ -58,6 +59,7 @@ def test_cli_help_and_override_wiring() -> None:
     assert "--patient" in help_text
     assert "--cell-type" in help_text
     assert "--k" in help_text
+    assert "Use -1 to force CPU execution." in normalized_help_text
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
