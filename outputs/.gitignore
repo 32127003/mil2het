@@ -1,0 +1,3 @@
+# Keep generated workflow artifacts out of Git.
+*
+!.gitignore

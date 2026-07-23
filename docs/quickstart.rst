@@ -16,10 +16,11 @@ arguments override matching YAML fields.
        label_column="case_control",
        ppi_path="data/ppi.tsv",
        embedding_views={
-           "esm3": "data/esm3_gene_embeddings.tsv",
-           "geneformer": "data/geneformer_gene_embeddings.tsv",
+           "GPT": "data/GPT_embeddings.pkl",
+           "node2vec": "data/Node2vec_embeddings.pkl",
+           "ESM3": "data/ESM3_embeddings.pkl",
        },
-       pathway_path="data/pathways.gmt",
+       pathway_path="data/pathways.json",
        output_root="outputs/example",
        epochs=20,
        lr=0.0003,
@@ -39,7 +40,7 @@ existing training run.
        config_path="workflow.yaml",
        analysis_only=True,
        run_dir="outputs/example/train_runs/run_001",
-       pathway_path="data/pathways.gmt",
+       pathway_path="data/pathways.json",
        gpu_index=-1,
    )
 

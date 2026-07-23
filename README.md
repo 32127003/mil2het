@@ -72,6 +72,12 @@ docker build -t mil2het:0.1.0 .
 docker run --rm mil2het:0.1.0 --help
 ```
 
+Prepare a local runtime configuration from the checked-in template:
+
+```bash
+cp inputs/config.example.yaml inputs/config.yaml
+```
+
 Build the test target to run the CPU-only test suite inside the build
 environment:
 
@@ -91,7 +97,7 @@ docker run --rm \
   mil2het:0.1.0 \
   /inputs/cohort.h5ad \
   --config /inputs/config.yaml \
-  --pathway-path /inputs/pathways.gmt \
+  --pathway-path /inputs/reactome.json \
   --output-dir /outputs/run-001 \
   --gpu 0
 ```

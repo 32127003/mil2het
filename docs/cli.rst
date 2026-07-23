@@ -10,9 +10,10 @@ The ``mil2het`` command wraps :func:`mil2het.pipeline.run_pipeline`.
      --celltype-column cell_type \
      --label-column case_control \
      --ppi data/ppi.tsv \
-     --gene-embedding esm3=data/esm3_gene_embeddings.tsv \
-     --gene-embedding geneformer=data/geneformer_gene_embeddings.tsv \
-     --pathway-path data/pathways.gmt \
+     --gene-embedding GPT=data/GPT_embeddings.pkl \
+     --gene-embedding node2vec=data/Node2vec_embeddings.pkl \
+     --gene-embedding ESM3=data/ESM3_embeddings.pkl \
+     --pathway-path data/pathways.json \
      --output-dir outputs/example \
      --epochs 20
 
