@@ -10,18 +10,12 @@
 A Python toolkit for patient phenotype prediction and single-cell biomarker
 discovery using multiple instance learning and multi-view gene embeddings.
 
-## Overview
+## Workflow
 
-`mil2het` runs a four-stage workflow on single-cell RNA sequencing data:
+`mil2het` runs on following two stages:
 
-1. **Split**: Creates patient-aware training, validation, and test partitions.
-2. **Preselection**: Selects genes using differential expression and network propagation.
-3. **Training**: Learns cell-level representations and aggregates them into
-   patient-level binary phenotype predictions with multiple instance learning.
-4. **Analysis (optional)**: Reuses a trained run to prioritize biomarkers.
-
-The primary Docker workflow stops after training and writes validation and test
-predictions. Biomarker analysis remains available as an optional follow-on.
+1. **Prediction phase**: network-based gene-space reduction, multi-view-prior-guided graph encoding, and MIL-based phenotype prediction.
+2. **Interpretation phase**: cell-type-level replacement and cell-type-resolved pathway/gene perturbation of the trained predictor.
 
 ## Installation
 
@@ -384,9 +378,11 @@ uv sync
 # Run CPU-only tests
 uv run pytest tests --cpu-only
 
-# Run all tests (requires GPU)
+# Run the full test suite (currently CPU-capable by default)
 uv run pytest tests
 ```
+
+The `--cpu-only` option skips tests marked as requiring CUDA execution.
 
 ### Building
 
@@ -425,11 +421,12 @@ strategy deliberately rather than adding the full training stack by default.
 If you use mil2het in your research, please cite:
 
 ```bibtex
-@inproceedings{ju2026scbiomarker,
-  title={scbiomarker: Multi-View Biomarker Discovery from Single-Cell Data},
-  author={Ju, et al.},
-  booktitle={ECCB},
-  year={2026}
+@article{choi2026mil2het,
+  title={MIL2Het: Learning Patient Phenotypes from Single-Cell Heterogeneity with Multi-view Prior Knowledge-informed Graph Learning},
+  author={Choi, Jeonguk and Cho, Changyun and Yun, Ilho and Jeong, Dabin and Kim, Daeun and Kim, Albert Seungeun and Seo, Sujin and Won, Sungho and Kim, Taebum and Kim, Sun},
+  journal={Bioinformatics},
+  year={2026},
+  pages={1--7}
 }
 ```
 
