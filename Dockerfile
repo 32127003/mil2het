@@ -23,7 +23,8 @@ COPY scripts ./scripts
 COPY network_propagation.py ./
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-default-groups --extra encoder --no-editable
+    uv sync --locked --no-default-groups --extra encoder --no-editable \
+    --reinstall-package mil2het
 
 
 FROM builder AS test

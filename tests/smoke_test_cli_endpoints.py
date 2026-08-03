@@ -26,6 +26,7 @@ def test_cli_endpoints_exist() -> None:
 
 
 def build_fake_result(temp_path: Path) -> PipelineResult:
+    run_dir = temp_path / "outputs" / "training" / "train_runs" / "toy_run"
     return PipelineResult(
         config={"output_root": str(temp_path / "outputs")},
         phases_completed=("split", "preselection", "training"),
@@ -33,20 +34,23 @@ def build_fake_result(temp_path: Path) -> PipelineResult:
         output_root=str(temp_path / "outputs"),
         splits_directory=str(temp_path / "outputs" / "splits"),
         preselection_output_root=str(temp_path / "outputs" / "preselection"),
-        run_dir=str(temp_path / "outputs" / "training" / "train_runs" / "toy_run"),
+        run_dir=str(run_dir),
         analysis_output_dir=str(temp_path / "outputs" / "analysis"),
         config_snapshot_path=str(temp_path / "outputs" / "training" / "train_runs" / "toy_run" / "workflow_config.yaml"),
         training_artifacts={
-            "best_checkpoint_path": str(
-                temp_path / "outputs" / "training" / "train_runs" / "toy_run" / "best_checkpoint.pt"
-            )
+            "best_checkpoint_path": str(run_dir / "best_checkpoint.pt"),
+            "final_metrics_path": str(run_dir / "final_metrics.json"),
+            "patient_predictions_val_path": str(run_dir / "patient_predictions_val.csv"),
+            "patient_predictions_test_path": str(run_dir / "patient_predictions_test.csv"),
         },
         analysis_artifacts=None,
+        latest_run_path=str(temp_path / "outputs" / "latest_run.json"),
     )
 
 
 def test_cli_help_and_override_wiring() -> None:
     help_text = cli.build_cli_arg_parser().format_help()
+    normalized_help_text = " ".join(help_text.split())
     assert "mil2het" in help_text
     assert "--config" in help_text
     assert "--gpu" in help_text
@@ -55,6 +59,7 @@ def test_cli_help_and_override_wiring() -> None:
     assert "--patient" in help_text
     assert "--cell-type" in help_text
     assert "--k" in help_text
+    assert "Use -1 to force CPU execution." in normalized_help_text
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -121,6 +126,10 @@ def test_cli_help_and_override_wiring() -> None:
         stdout_text = stdout_buffer.getvalue()
         assert "phases=split,preselection,training" in stdout_text
         assert "best_checkpoint_path=" in stdout_text
+        assert "final_metrics_path=" in stdout_text
+        assert "patient_predictions_val_path=" in stdout_text
+        assert "patient_predictions_test_path=" in stdout_text
+        assert "latest_run_path=" in stdout_text
 
 
 def test_cli_analysis_only_wiring() -> None:

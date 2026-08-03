@@ -129,6 +129,23 @@ def test_config_rejects_training_epochs_below_five() -> None:
     assert analysis_only["epochs"] == 1
 
 
+def test_config_rejects_overlapping_binary_labels() -> None:
+    try:
+        config.load_workflow_config_dict(
+            overrides={
+                "labels": {
+                    "positive": ["case", "shared"],
+                    "negative": ["control", "shared"],
+                }
+            }
+        )
+    except ValueError as error:
+        assert "labels.positive and labels.negative must be disjoint" in str(error)
+        assert "shared" in str(error)
+    else:
+        raise AssertionError("expected overlapping binary labels to fail loudly")
+
+
 def test_legacy_flat_snapshot_round_trip() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)

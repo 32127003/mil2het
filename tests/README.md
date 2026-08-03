@@ -7,21 +7,21 @@ Canonical in-repo pytest suite for the `mil2het` package.
 Create or reuse a development environment, then install the package plus pytest:
 
 ```bash
-conda create -n scbiomarker-test python=3.10 -y
-conda run -n scbiomarker-test python -m pip install --upgrade pip setuptools wheel pytest
-conda run -n scbiomarker-test python -m pip install .
+conda create -n mil2het-test python=3.10 -y
+conda run -n mil2het-test python -m pip install --upgrade pip setuptools wheel pytest
+conda run -n mil2het-test python -m pip install .
 ```
 
 Torch-based tests still need manual installation of `torch` and `torch-scatter`:
 
 ```bash
 # Install CPU-only torch for a chosen version.
-conda run -n scbiomarker-test python -m pip install \
+conda run -n mil2het-test python -m pip install \
   --index-url https://download.pytorch.org/whl/cpu \
   torch==2.5.1
 
 # Install matching CPU torch-scatter wheel.
-conda run -n scbiomarker-test python -m pip install --only-binary=torch-scatter \
+conda run -n mil2het-test python -m pip install --only-binary=torch-scatter \
   torch-scatter \
   -f https://data.pyg.org/whl/torch-2.5.1+cpu.html
 ```
@@ -31,25 +31,25 @@ conda run -n scbiomarker-test python -m pip install --only-binary=torch-scatter 
 Run the full in-repo suite:
 
 ```bash
-conda run -n scbiomarker-test pytest tests -q
+conda run -n mil2het-test pytest tests -q
 ```
 
 Run the CPU-only suite used by CI:
 
 ```bash
-conda run -n scbiomarker-test pytest tests --cpu-only -q
+conda run -n mil2het-test pytest tests --cpu-only -q
 ```
 
 Run a single module test file:
 
 ```bash
-conda run -n scbiomarker-test pytest tests/smoke_test_train_endpoints.py --cpu-only -q
+conda run -n mil2het-test pytest tests/smoke_test_train_endpoints.py --cpu-only -q
 ```
 
 For convenience, the legacy smoke runner now dispatches to pytest:
 
 ```bash
-conda run -n scbiomarker-test python tests/run_all_endpoint_smoke_tests.py --cpu-only -q
+conda run -n mil2het-test python tests/run_all_endpoint_smoke_tests.py --cpu-only -q
 ```
 
 ## CPU-only vs GPU-marked tests

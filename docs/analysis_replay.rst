@@ -10,7 +10,7 @@ Analysis replay uses a completed training run as input. Provide
    mil2het --analysis-only \
      --run-dir outputs/example/train_runs/run_001 \
      --analysis-output-dir outputs/example/analysis_replay \
-     --pathway-path data/pathways.gmt \
+     --pathway-path data/pathways.json \
      --gpu -1
 
 The replay path does not accept a new ``.h5ad`` input. It uses a provided config

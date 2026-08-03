@@ -1,0 +1,28 @@
+workflow:
+  input_h5ad: /inputs/cohort.h5ad
+  output_root: /outputs/mil2het
+  num_folds: 5
+  split_number: 0
+  seed: 42
+  train_only: true
+
+columns:
+  patient: patient_id
+  celltype: cell_type
+  label: phenotype
+
+labels:
+  positive: ["1"]
+  negative: ["0"]
+
+resources:
+  ppi_path: /inputs/ppi.tsv
+  embedding_views:
+    GPT: /inputs/GPT_embeddings.pkl
+    node2vec: /inputs/Node2vec_embeddings.pkl
+    ESM3: /inputs/ESM3_embeddings.pkl
+
+training:
+  epochs: 200
+  lr: 0.0003
+  k: 2000

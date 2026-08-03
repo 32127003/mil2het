@@ -312,6 +312,15 @@ def test_train_model_spec_embeddings_and_optimizer() -> None:
         )
         assert Path(artifacts["output_dir"]).is_dir()
         assert Path(artifacts["cache_dir"]).is_dir()
+        assert artifacts["final_metrics_path"] == str(
+            Path(artifacts["output_dir"]) / "final_metrics.json"
+        )
+        assert artifacts["patient_predictions_val_path"] == str(
+            Path(artifacts["output_dir"]) / "patient_predictions_val.csv"
+        )
+        assert artifacts["patient_predictions_test_path"] == str(
+            Path(artifacts["output_dir"]) / "patient_predictions_test.csv"
+        )
 
     num_nodes = 8
     num_celltypes = 3
@@ -433,7 +442,6 @@ def test_train_run_training_phase_direct_call() -> None:
         config.adata_path = str(adata_path)
         config.adata_directory = str(temp_path)
         config.splits_directory = str(splits_dir)
-        config.preselection_root = ""
         config.preselection_output_root = str(preselection_output_root)
         config.experiment_root = str(temp_path / "experiment")
         config.patient_column = "patient_id"
@@ -609,7 +617,8 @@ def test_train_run_training_phase_direct_call() -> None:
         with open(artifacts["metadata_path"], "r", encoding="utf-8") as handle:
             metadata_payload = json.load(handle)
         assert run_config_payload["resolved_paths"]["adata_path"] == str(adata_path.resolve())
-        assert run_config_payload["resolved_paths"]["preselection_root"] == str(preselection_root.resolve())
+        assert run_config_payload["resolved_paths"]["preselection_split_root"] == str(preselection_root.resolve())
+        assert "preselection_root" not in run_config_payload["resolved_paths"]
         assert run_config_payload["resolved_paths"]["run_dir"] == str(Path(artifacts["output_dir"]).resolve())
         assert metadata_payload["label_mapping"] == {"0": 0, "1": 1}
         assert metadata_payload["celltype_mapping"] == {"B": 0, "T": 1}

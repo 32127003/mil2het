@@ -602,66 +602,23 @@ def normalize_embedding_dict(embedding_object) -> Dict[str, np.ndarray]:
 
 
 def resolve_preselection_root(config: SimpleNamespace) -> str:
-    dataset_root = os.path.join(PROJECT_ROOT, "data", str(config.dataset))
-    mode = getattr(config, "split_train_only_preselection", None)
-
-    split_subdir = str(getattr(config, "split_preselection_subdir", "split_preselection"))
     split_index = int(getattr(config, "split_number", 0))
-    explicit_global_root_candidates: List[str] = []
-    explicit_split_root_candidates: List[str] = []
+    preselection_output_root = str(
+        getattr(config, "preselection_output_root", "") or ""
+    ).strip()
+    if preselection_output_root == "":
+        raise ValueError("config.preselection_output_root must be set.")
 
-    for attr_name in ("preselection_root", "preselection_output_root"):
-        explicit_root = str(getattr(config, attr_name, "")).strip()
-        if explicit_root == "":
-            continue
-        explicit_global_root_candidates.append(explicit_root)
-        explicit_split_root_candidates.extend(
-            [
-                os.path.join(explicit_root, f"split_{split_index}"),
-                os.path.join(explicit_root, f"split_idx_{split_index}"),
-                explicit_root,
-            ]
-        )
-
-    legacy_split_root_candidates = [
-        os.path.join(dataset_root, "preselection", f"split_{split_index}"),
-        os.path.join(dataset_root, split_subdir, f"split_idx_{split_index}"),
-        os.path.join(dataset_root, split_subdir, f"split_{split_index}"),
-    ]
-    split_root_candidates = explicit_split_root_candidates + legacy_split_root_candidates
-
-    explicit_split_root = ""
-    for candidate in explicit_split_root_candidates:
-        if os.path.isdir(candidate):
-            explicit_split_root = str(candidate)
-            break
-
-    legacy_split_root = ""
-    for candidate in legacy_split_root_candidates:
-        if os.path.isdir(candidate):
-            legacy_split_root = str(candidate)
-            break
-
-    split_root = explicit_split_root or legacy_split_root
-
-    if mode is False:
-        for candidate in explicit_global_root_candidates:
-            if os.path.isdir(candidate):
-                return str(candidate)
-        return explicit_global_root_candidates[0] if explicit_global_root_candidates else dataset_root
-
-    if mode is True:
-        if split_root == "":
-            raise FileNotFoundError(
-                "split-specific preselection directory not found: "
-                f"{split_root_candidates} (set split_train_only_preselection=False to use global files)."
-            )
+    split_root = os.path.join(preselection_output_root, f"split_{split_index}")
+    if os.path.isdir(os.path.join(split_root, "NP")) or os.path.isdir(
+        os.path.join(split_root, "DEG")
+    ):
         return split_root
 
-    # Auto mode (default): prefer split-specific preselection when available.
-    if split_root != "":
-        return split_root
-    return dataset_root
+    raise FileNotFoundError(
+        "split-specific preselection directory not found. "
+        f"Expected: {split_root}. Run modules/preselection.py first."
+    )
 
 
 def _deduplicate_preserve_order(values: Sequence[str]) -> List[str]:
@@ -2540,7 +2497,7 @@ def run_analysis_phase(
         "qkv_pretrain": bool(getattr(config, "QKV_pretrain", getattr(config, "qkv_pretrain", False))),
         "protein_prior_projection_hidden_dim": int(getattr(config, "protein_prior_projection_hidden_dim", 0)),
         "protein_prior_projection_dropout": float(getattr(config, "protein_prior_projection_dropout", 0.1)),
-        "preselection_root": str(preselection_root),
+        "preselection_split_root": str(preselection_root),
         "deg_zscore_source_path": str(zscore_source_path),
         "deg_zscore_missing": int(zscore_missing),
         "baseline_metrics": {key: float(value) for key, value in baseline_metrics.items()},

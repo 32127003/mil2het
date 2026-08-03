@@ -1,6 +1,12 @@
 """
 example usage:
-python scripts/preselection.py --dataset asthma 
+python scripts/preselection.py \
+  --adata-path data.h5ad \
+  --label-column phenotype \
+  --celltype-column cell_type \
+  --ppi-path ppi.tsv \
+  --splits-directory outputs/splits \
+  --output-dir outputs/preselection
 
 """
 import argparse
@@ -24,7 +30,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from mil2het.config import parse_workflow_cli_args
 from modules.utils import *
-from configs.config import *
 
 
 DEFAULT_DEG_MAX_P_VALUE = 0.05
@@ -264,26 +269,11 @@ def resolve_adata_path(config) -> str:
     return os.path.join(adata_directory, dataset_name, f"{dataset_name}_data.h5ad")
 
 
-def resolve_preselection_output_root(config, dataset_name: str) -> str:
-    output_root = str(
-        getattr(config, "out_dir", "")
-        or getattr(config, "output_dir", "")
-        or getattr(config, "preselection_root", "")
-        or ""
-    ).strip()
-    if output_root != "":
-        return output_root
-
-    if str(getattr(config, "dataset", "") or "").strip() != "":
-        return os.path.join(PROJECT_ROOT, "data", dataset_name, "preselection")
-
-    splits_directory = str(getattr(config, "splits_directory", "") or "").strip()
-    if splits_directory != "":
-        return os.path.join(str(Path(splits_directory).resolve().parent), "preselection")
-
-    raise ValueError(
-        "Either config.out_dir/output_dir/preselection_root or config.splits_directory must be set."
-    )
+def resolve_preselection_output_root(config) -> str:
+    output_root = str(getattr(config, "preselection_output_root", "") or "").strip()
+    if output_root == "":
+        raise ValueError("config.preselection_output_root must be set.")
+    return output_root
 
 
 def discover_split_indices(splits_dir: str, dataset_name: str, num_folds: Optional[int] = None) -> List[int]:
@@ -842,7 +832,7 @@ def preselection(
     group1: str,
     group2: str,
     celltype_column: str,
-    out_dir: str,
+    output_dir: str,
     split_idx: Optional[int] = None,
     deg_max_p_value: Optional[float] = None,
     deg_min_abs_logfc: Optional[float] = None,
@@ -870,7 +860,7 @@ def preselection(
         )
     
     #Gene space reduction with DEG analysis, by cell type. 
-    deg_out_dir = os.path.join(out_dir, "DEG")
+    deg_out_dir = os.path.join(output_dir, "DEG")
     os.makedirs(deg_out_dir, exist_ok=True)
     groups = [group1, group2]
 
@@ -1019,7 +1009,7 @@ def preselection(
     #Gene space extension with Network Propagation. Use top k NP ranked genes later for training
     
     
-    np_out_dir = os.path.join(out_dir, "NP")
+    np_out_dir = os.path.join(output_dir, "NP")
     os.makedirs(np_out_dir, exist_ok=True)
 
     deg_merged_path = os.path.join(deg_out_dir, "DEG_merged.tsv")
@@ -1107,8 +1097,8 @@ def run_split_preselection(config) -> str:
     print(f"reading adata from {adata_path}...")
     adata = sc.read_h5ad(adata_path)
 
-    out_dir = resolve_preselection_output_root(config, dataset_name=dataset_name)
-    os.makedirs(out_dir, exist_ok=True)
+    preselection_output_root = resolve_preselection_output_root(config)
+    os.makedirs(preselection_output_root, exist_ok=True)
     split_indices = discover_split_indices(
         splits_dir=str(config.splits_directory),
         dataset_name=dataset_name,
@@ -1122,7 +1112,7 @@ def run_split_preselection(config) -> str:
             split_idx=split_idx,
         )
         adata_train = adata[train_indices].copy()
-        split_out_dir = os.path.join(out_dir, f"split_{split_idx}")
+        split_out_dir = os.path.join(preselection_output_root, f"split_{split_idx}")
         os.makedirs(split_out_dir, exist_ok=True)
         print(
             f"Running preselection for split {split_idx} with {len(train_indices)} training samples",
@@ -1135,7 +1125,7 @@ def run_split_preselection(config) -> str:
             group1=str(getattr(config, "binary_positive_label", "1")),
             group2=str(getattr(config, "binary_negative_label", "0")),
             celltype_column=str(config.celltype_column),
-            out_dir=split_out_dir,
+            output_dir=split_out_dir,
             split_idx=split_idx,
             deg_max_p_value=float(getattr(config, "deg_max_p_value", 0.05)),
             deg_min_abs_logfc=float(getattr(config, "deg_min_abs_logfc", 1.0)),
@@ -1145,47 +1135,25 @@ def run_split_preselection(config) -> str:
             directed=bool(getattr(config, "directed", False)),
         )
 
-    print(f"Split output directory: {out_dir}", flush=True)
-    return out_dir
-
-
-def build_legacy_preselection_config(dataset_name: str):
-    dataset_key = str(dataset_name).strip()
-    if dataset_key == "asthma":
-        config_dict = dict(asthma_split_configuration)
-    elif dataset_key == "asthma_ext":
-        config_dict = dict(asthma_ext_split_configuration)
-    elif dataset_key == "vitiligo":
-        config_dict = dict(vitiligo_split_configuration)
-    elif dataset_key == "covid":
-        config_dict = dict(covid_split_configuration)
-    else:
-        raise ValueError(
-            f"Unsupported dataset: {dataset_key}, custom split configuration is required for new datasets."
-        )
-
-    config_dict["dataset"] = dataset_key
-    return dict2namespace(config_dict)
+    print(f"Split output directory: {preselection_output_root}", flush=True)
+    return preselection_output_root
 
 
 def build_preselection_config_from_cli_args(args):
-    if args.dataset is not None and args.adata_path is None and args.label_column is None and args.celltype_column is None:
-        return build_legacy_preselection_config(args.dataset)
-
     if args.adata_path is None:
-        raise ValueError("--adata-path is required when not using a legacy --dataset preset.")
+        raise ValueError("--adata-path is required.")
     if args.label_column is None:
-        raise ValueError("--label-column is required when not using a legacy --dataset preset.")
+        raise ValueError("--label-column is required.")
     if args.celltype_column is None:
-        raise ValueError("--celltype-column is required when not using a legacy --dataset preset.")
+        raise ValueError("--celltype-column is required.")
     if args.splits_directory is None:
-        raise ValueError("--splits-directory is required when not using a legacy --dataset preset.")
+        raise ValueError("--splits-directory is required.")
     if args.ppi_path is None:
-        raise ValueError("--ppi-path is required when not using a legacy --dataset preset.")
+        raise ValueError("--ppi-path is required.")
     if args.output_dir is None:
-        raise ValueError("--output-dir is required when not using a legacy --dataset preset.")
+        raise ValueError("--output-dir is required.")
 
-    dataset_name = str(args.dataset_name or args.dataset or "").strip()
+    dataset_name = str(args.dataset_name or "").strip()
     if dataset_name == "":
         stem = Path(str(args.adata_path)).stem
         dataset_name = stem[: -len("_data")] if stem.endswith("_data") else stem
@@ -1197,7 +1165,7 @@ def build_preselection_config_from_cli_args(args):
         "label_column": str(args.label_column),
         "ppi_path": str(args.ppi_path),
         "splits_directory": str(args.splits_directory),
-        "out_dir": str(args.output_dir),
+        "preselection_output_root": str(args.output_dir),
         "num_folds": int(args.num_folds) if args.num_folds is not None else 5,
         "binary_positive_label": str(args.positive_label or "1"),
         "binary_negative_label": str(args.negative_label or "0"),
@@ -1215,7 +1183,6 @@ def build_preselection_config_from_cli_args(args):
 
 def build_preselection_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Split-aware preselection for DEG/NP (split-train-only).")
-    parser.add_argument("--dataset", type=str, required=False, help="Legacy dataset preset name.")
     parser.add_argument("--dataset-name", type=str, default=None, help="Explicit dataset/output prefix.")
     parser.add_argument("--adata-path", type=str, default=None, help="Explicit .h5ad path.")
     parser.add_argument("--label-column", type=str, default=None, help="Label column in adata.obs.")
@@ -1238,13 +1205,7 @@ def build_preselection_arg_parser() -> argparse.ArgumentParser:
 def load_preselection_config_from_cli(argv: Optional[Sequence[str]] = None):
     argv_list = list(sys.argv[1:] if argv is None else argv)
     if "--config" in argv_list or "--adata" in argv_list:
-        config = parse_workflow_cli_args(argv_list).config
-        output_root = str(getattr(config, "preselection_output_root", "") or "")
-        if str(getattr(config, "out_dir", "") or "").strip() == "" and output_root != "":
-            config.out_dir = output_root
-        if str(getattr(config, "output_dir", "") or "").strip() == "" and output_root != "":
-            config.output_dir = output_root
-        return config
+        return parse_workflow_cli_args(argv_list).config
 
     parser = build_preselection_arg_parser()
     args = parser.parse_args(argv_list)

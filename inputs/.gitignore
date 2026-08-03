@@ -1,0 +1,5 @@
+# Keep runtime inputs local. Only the template and instructions belong in Git.
+*
+!.gitignore
+!README.md
+!config.example.yaml

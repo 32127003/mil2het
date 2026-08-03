@@ -31,7 +31,7 @@ def build_cli_arg_parser() -> argparse.ArgumentParser:
         dest="gpu_index",
         type=int,
         default=None,
-        help="GPU index for runtime selection. Use -1 to force CPU analysis.",
+        help="GPU index for runtime selection. Use -1 to force CPU execution.",
     )
     return parser
 
@@ -57,8 +57,19 @@ def _result_lines(result: PipelineResult) -> list[str]:
         f"analysis_output_dir={result.analysis_output_dir}",
         f"config_snapshot_path={result.config_snapshot_path}",
     ]
-    if result.training_artifacts is not None and "best_checkpoint_path" in result.training_artifacts:
-        lines.append(f"best_checkpoint_path={result.training_artifacts['best_checkpoint_path']}")
+    if result.training_artifacts is not None:
+        for artifact_name in (
+            "best_checkpoint_path",
+            "final_metrics_path",
+            "patient_predictions_val_path",
+            "patient_predictions_test_path",
+        ):
+            if artifact_name in result.training_artifacts:
+                lines.append(
+                    f"{artifact_name}={result.training_artifacts[artifact_name]}"
+                )
+    if result.latest_run_path != "":
+        lines.append(f"latest_run_path={result.latest_run_path}")
     return lines
 
 

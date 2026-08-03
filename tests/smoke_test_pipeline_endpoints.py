@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import tempfile
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 import scanpy as sc
 import yaml
 
@@ -27,6 +29,24 @@ def test_pipeline_endpoints_exist() -> None:
     assert callable(run_pipeline)
 
 
+def test_run_pipeline_rejects_missing_input_before_workflow_phases() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+
+        with pytest.raises(ValueError, match=r"workflow\.input_h5ad.*not found"):
+            pipeline.run_pipeline(
+                input_h5ad=temp_path / "missing.h5ad",
+                patient_column="patient_id",
+                celltype_column="celltype",
+                label_column="label",
+                ppi_path=temp_path / "ppi.tsv",
+                embedding_views={"esm": temp_path / "esm.pkl"},
+                output_root=temp_path / "outputs",
+                train_only=True,
+                device="cpu",
+            )
+
+
 def build_toy_adata() -> sc.AnnData:
     adata = sc.AnnData(X=np.random.randn(6, 4).astype(np.float32))
     adata.var_names = pd.Index(["G1", "G2", "G3", "G4"])
@@ -34,6 +54,155 @@ def build_toy_adata() -> sc.AnnData:
     adata.obs["celltype"] = ["T", "B", "T", "B", "T", "B"]
     adata.obs["label"] = ["1", "1", "0", "0", "1", "0"]
     return adata
+
+
+def test_run_pipeline_rejects_missing_required_adata_column() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        ppi_path = temp_path / "ppi.tsv"
+        embedding_path = temp_path / "esm.pkl"
+
+        ppi_path.write_text("protein1\tprotein2\n", encoding="utf-8")
+        embedding_path.write_bytes(b"placeholder")
+
+        cases = [
+            ("patient_id", "columns.patient"),
+            ("celltype", "columns.celltype"),
+            ("label", "columns.label"),
+        ]
+        for column_name, field_name in cases:
+            input_h5ad = temp_path / f"cohort-without-{column_name}.h5ad"
+            adata = build_toy_adata()
+            del adata.obs[column_name]
+            adata.write_h5ad(input_h5ad)
+            escaped_field_name = field_name.replace(".", r"\.")
+
+            with pytest.raises(
+                ValueError,
+                match=rf"{escaped_field_name}.*{column_name}.*adata\.obs",
+            ):
+                pipeline.run_pipeline(
+                    input_h5ad=input_h5ad,
+                    patient_column="patient_id",
+                    celltype_column="celltype",
+                    label_column="label",
+                    ppi_path=ppi_path,
+                    embedding_views={"esm": embedding_path},
+                    output_root=temp_path / "outputs",
+                    num_folds=3,
+                    train_only=True,
+                    device="cpu",
+                )
+
+
+def test_run_pipeline_rejects_missing_training_resource() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        input_h5ad = temp_path / "cohort.h5ad"
+        embedding_path = temp_path / "esm.pkl"
+
+        build_toy_adata().write_h5ad(input_h5ad)
+        embedding_path.write_bytes(b"placeholder")
+
+        with pytest.raises(ValueError, match=r"resources\.ppi_path.*missing-ppi\.tsv"):
+            pipeline.run_pipeline(
+                input_h5ad=input_h5ad,
+                patient_column="patient_id",
+                celltype_column="celltype",
+                label_column="label",
+                ppi_path=temp_path / "missing-ppi.tsv",
+                embedding_views={"esm": embedding_path},
+                output_root=temp_path / "outputs",
+                num_folds=3,
+                train_only=True,
+                device="cpu",
+            )
+
+        ppi_path = temp_path / "ppi.tsv"
+        ppi_path.write_text("protein1\tprotein2\n", encoding="utf-8")
+        with pytest.raises(ValueError, match=r"resources\.embedding_views\.esm.*missing-esm\.pkl"):
+            pipeline.run_pipeline(
+                input_h5ad=input_h5ad,
+                patient_column="patient_id",
+                celltype_column="celltype",
+                label_column="label",
+                ppi_path=ppi_path,
+                embedding_views={"esm": temp_path / "missing-esm.pkl"},
+                output_root=temp_path / "outputs",
+                num_folds=3,
+                train_only=True,
+                device="cpu",
+            )
+
+        with pytest.raises(ValueError, match=r"resources\.embedding_views.*at least one"):
+            pipeline.run_pipeline(
+                input_h5ad=input_h5ad,
+                patient_column="patient_id",
+                celltype_column="celltype",
+                label_column="label",
+                ppi_path=ppi_path,
+                embedding_views={},
+                output_root=temp_path / "outputs",
+                num_folds=3,
+                train_only=True,
+                device="cpu",
+            )
+
+
+def test_run_pipeline_rejects_unwritable_output_root_before_workflow_phases() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        input_h5ad = temp_path / "cohort.h5ad"
+        ppi_path = temp_path / "ppi.tsv"
+        embedding_path = temp_path / "esm.pkl"
+        output_root = temp_path / "not-a-directory"
+
+        build_toy_adata().write_h5ad(input_h5ad)
+        ppi_path.write_text("protein1\tprotein2\n", encoding="utf-8")
+        embedding_path.write_bytes(b"placeholder")
+        output_root.write_text("occupied", encoding="utf-8")
+
+        with pytest.raises(ValueError, match=r"workflow\.output_root.*not-a-directory"):
+            pipeline.run_pipeline(
+                input_h5ad=input_h5ad,
+                patient_column="patient_id",
+                celltype_column="celltype",
+                label_column="label",
+                ppi_path=ppi_path,
+                embedding_views={"esm": embedding_path},
+                output_root=output_root,
+                num_folds=3,
+                train_only=True,
+                device="cpu",
+            )
+
+
+def test_run_pipeline_rejects_invalid_training_split_selection() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        input_h5ad = temp_path / "cohort.h5ad"
+        ppi_path = temp_path / "ppi.tsv"
+        embedding_path = temp_path / "esm.pkl"
+
+        build_toy_adata().write_h5ad(input_h5ad)
+        ppi_path.write_text("protein1\tprotein2\n", encoding="utf-8")
+        embedding_path.write_bytes(b"placeholder")
+
+        for num_folds, split_number in [(2, 0), (3, -1), (3, 3)]:
+            with pytest.raises(ValueError, match=r"workflow\.(num_folds|split_number)"):
+                pipeline.run_pipeline(
+                    input_h5ad=input_h5ad,
+                    patient_column="patient_id",
+                    celltype_column="celltype",
+                    label_column="label",
+                    ppi_path=ppi_path,
+                    embedding_views={"esm": embedding_path},
+                    output_root=temp_path / "outputs",
+                    num_folds=num_folds,
+                    split_number=split_number,
+                    train_only=True,
+                    device="cpu",
+                )
 
 
 def test_run_pipeline_full_train_only_and_analysis_only() -> None:
@@ -81,9 +250,21 @@ def test_run_pipeline_full_train_only_and_analysis_only() -> None:
             run_dir = Path(str(config.experiment_root)) / "train_runs" / "toy_run"
             run_dir.mkdir(parents=True, exist_ok=True)
             (run_dir / "best_checkpoint.pt").write_bytes(b"checkpoint")
+            (run_dir / "final_metrics.json").write_text('{"test": {}}\n', encoding="utf-8")
+            (run_dir / "patient_predictions_val.csv").write_text(
+                "patient_id,pred_prob\nP1,0.5\n",
+                encoding="utf-8",
+            )
+            (run_dir / "patient_predictions_test.csv").write_text(
+                "patient_id,pred_prob\nP2,0.7\n",
+                encoding="utf-8",
+            )
             return {
                 "output_dir": str(run_dir),
                 "best_checkpoint_path": str(run_dir / "best_checkpoint.pt"),
+                "final_metrics_path": str(run_dir / "final_metrics.json"),
+                "patient_predictions_val_path": str(run_dir / "patient_predictions_val.csv"),
+                "patient_predictions_test_path": str(run_dir / "patient_predictions_test.csv"),
             }
 
         def fake_analysis(run_dir: str, *, config_path: str = "", output_dir: str = "", pathway_path: str = "", gpu_index=None):
@@ -143,6 +324,27 @@ def test_run_pipeline_full_train_only_and_analysis_only() -> None:
             assert snapshot_payload["prior_view_sources"] == ["node2vec", "esm3"]
             assert snapshot_payload["training"]["epochs"] == 5
             assert snapshot_payload["run_dir"] == str(full_result.run_dir)
+            latest_run_path = output_root / "latest_run.json"
+            assert full_result.latest_run_path == str(latest_run_path.resolve())
+            latest_run_payload = json.loads(latest_run_path.read_text(encoding="utf-8"))
+            assert latest_run_payload["schema_version"] == 1
+            assert latest_run_payload["status"] == "training_complete"
+            assert latest_run_payload["run_dir"] == str(Path(full_result.run_dir).resolve())
+            assert latest_run_payload["best_checkpoint_path"].endswith("/best_checkpoint.pt")
+            assert latest_run_payload["final_metrics_path"].endswith("/final_metrics.json")
+            assert latest_run_payload["patient_predictions_val_path"].endswith(
+                "/patient_predictions_val.csv"
+            )
+            assert latest_run_payload["patient_predictions_test_path"].endswith(
+                "/patient_predictions_test.csv"
+            )
+            assert latest_run_payload["config_snapshot_path"] == str(
+                Path(full_result.config_snapshot_path).resolve()
+            )
+            assert latest_run_payload["relative_paths"]["run_dir"] == (
+                "training/train_runs/toy_run"
+            )
+            assert not list(output_root.glob(".latest_run.json.*"))
 
             call_order.clear()
             analysis_calls.clear()
